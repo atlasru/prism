@@ -1,0 +1,38 @@
+name: Prism Windows
+on:
+  push:
+    branches: [feature/prism-v0.1.0-windows, main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: prism-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_${{ matrix.configuration == 'Release' && 'RELEASE' || 'DEBUG' }}=. -DDOWNLOAD_GTEST=ON -DCLIENT=ON -DSERVER=OFF -DTOOLS=OFF -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF
+      - name: Build client and tests
+        run: cmake --build build --config ${{ matrix.configuration }} --target game-client tests --parallel 4
+      - name: Run tests
+        run: cmake --build build --config ${{ matrix.configuration }} --target run_tests
+      - name: Package
+        if: matrix.configuration == 'Release'
+        run: cmake --build build --config Release --target package_default
+      - uses: actions/upload-artifact@v4
+        if: matrix.configuration == 'Release'
+        with:
+          name: prism-foundation-windows-x64
+          path: build/*-win64.zip
+          if-no-files-found: error
