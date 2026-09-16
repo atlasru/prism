@@ -2313,6 +2313,8 @@ bool CMenus::OnInput(const IInput::CEvent &Event)
 		(Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_INSERT)
 	{
 		m_PrismOpen = !m_PrismOpen;
+		if(!m_PrismOpen)
+			Ui()->ClosePopupMenus();
 		Ui()->SetActiveItem(nullptr);
 		Ui()->SetHotItem(nullptr);
 		Ui()->ClearHotkeys();
@@ -2324,6 +2326,12 @@ bool CMenus::OnInput(const IInput::CEvent &Event)
 	{
 		if((Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_ESCAPE)
 		{
+			if(Ui()->IsPopupOpen())
+			{
+				Ui()->ClosePopupMenus();
+				Ui()->ClearHotkeys();
+				return true;
+			}
 			m_PrismOpen = false;
 			Ui()->SetActiveItem(nullptr);
 			Ui()->ClearHotkeys();
@@ -2412,7 +2420,7 @@ void CMenus::OnRender()
 		Ui()->StartCheck();
 		UpdateColors();
 		Ui()->Update();
-		if(m_PrismOpen && Ui()->ConsumeHotkey(CUi::HOTKEY_TAB))
+		if(m_PrismOpen && !Ui()->IsPopupOpen() && Ui()->ConsumeHotkey(CUi::HOTKEY_TAB))
 		{
 			m_PrismCategory = (m_PrismCategory + 1) % 6;
 			Ui()->SetActiveItem(nullptr);

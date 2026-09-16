@@ -55,8 +55,11 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Header.VSplitRight(67.0f, &Title, &Close);
 	Ui()->DoLabel(&Title, "PRISM   /   VISUAL STUDIO", 18.0f, TEXTALIGN_ML);
 	static CButtonContainer s_Close;
-	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.0f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
+	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.52f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
+	{
+		Ui()->ClosePopupMenus();
 		m_PrismOpen = false;
+	}
 
 	CUIRect Sidebar, Content;
 	Body.VSplitLeft(std::min(153.0f * Scale, Body.w * 0.29f), &Sidebar, &Content);
@@ -78,7 +81,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		s_aTabBlend[i] += (Target - s_aTabBlend[i]) * Motion;
 		const float Highlight = s_aTabBlend[i];
 		const ColorRGBA ButtonColor(0.26f + Highlight * 0.16f, 0.32f + Highlight * 0.18f, 0.40f + Highlight * 0.20f, 0.10f + Highlight * 0.32f);
-		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.0f, ButtonColor))
+		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.42f, ButtonColor))
 		{
 			m_PrismCategory = i;
 			Ui()->SetActiveItem(nullptr);
@@ -155,7 +158,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		Label("Disabling visuals preserves original DDNet rendering.");
 		static CButtonContainer s_Reset;
 		CUIRect Reset = NextRow(37.0f);
-		if(!Scroll.RectClipped(Reset) && DoButton_Menu(&s_Reset, "Restore Prism defaults", 0, &Reset, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.0f, ColorRGBA(0.32f, 0.40f, 0.49f, 0.28f)))
+		if(!Scroll.RectClipped(Reset) && DoButton_Menu(&s_Reset, "Restore Prism defaults", 0, &Reset, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.40f, ColorRGBA(0.32f, 0.40f, 0.49f, 0.28f)))
 			Prism::Reset(g_Config);
 		break;
 	}
@@ -171,7 +174,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 				continue;
 			const bool Selected = g_Config.m_PrismPreset == i;
 			const ColorRGBA Color = Selected ? ColorRGBA(0.39f, 0.54f, 0.67f, 0.42f) : ColorRGBA(0.29f, 0.37f, 0.46f, 0.17f);
-			if(DoButton_Menu(&s_aPresets[i], s_apPresets[i], 0, &Preset, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 10.0f, 0.0f, Color))
+			if(DoButton_Menu(&s_aPresets[i], s_apPresets[i], 0, &Preset, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 10.0f, 0.38f, Color))
 				Prism::ApplyPreset(g_Config, i);
 		}
 		Label("Editing a built-in look switches to Custom.");
