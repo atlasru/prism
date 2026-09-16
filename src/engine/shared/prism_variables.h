@@ -20,3 +20,6 @@ MACRO_CONFIG_INT(PrismOtherHookIntensity, prism_other_hook_intensity, 30, 0, 100
 MACRO_CONFIG_COL(PrismOtherOutlineColor, prism_other_outline_color, 13145023, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Other OutlineColor")
 MACRO_CONFIG_COL(PrismOtherGlowColor, prism_other_glow_color, 13145023, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Other GlowColor")
 MACRO_CONFIG_COL(PrismOtherHookColor, prism_other_hook_color, 13145023, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Other HookColor")
+MACRO_CONFIG_INT(PrismMenuScale, prism_menu_scale, 100, 80, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism overlay scale")
+MACRO_CONFIG_INT(PrismPanelOpacity, prism_panel_opacity, 85, 50, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism frosted panel opacity")
+MACRO_CONFIG_INT(PrismReducedMotion, prism_reduced_motion, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Disable Prism overlay animations")

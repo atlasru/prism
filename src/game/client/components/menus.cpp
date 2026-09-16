@@ -2254,6 +2254,11 @@ void CMenus::PopupConfirmDemoReplaceVideo()
 
 void CMenus::SetActive(bool Active)
 {
+	if(Active && m_PrismOpen)
+	{
+		m_PrismOpen = false;
+		m_PrismTransition = 0.0f;
+	}
 	if(Active != m_MenuActive)
 	{
 		Ui()->SetHotItem(nullptr);
@@ -2292,7 +2297,7 @@ void CMenus::OnShutdown()
 
 bool CMenus::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 {
-	if(!m_MenuActive)
+	if(!m_MenuActive && !m_PrismOpen)
 		return false;
 
 	Ui()->ConvertMouseMove(&x, &y, CursorType);
@@ -2303,8 +2308,40 @@ bool CMenus::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 
 bool CMenus::OnInput(const IInput::CEvent &Event)
 {
-	// Escape key is always handled to activate/deactivate menu
-	if((Event.m_Flags & IInput::FLAG_PRESS && Event.m_Key == KEY_ESCAPE) || IsActive())
+	const bool Playing = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
+	if(Playing && m_Popup == POPUP_NONE && (m_PrismOpen || !IsActive()) &&
+		(Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_INSERT)
+	{
+		m_PrismOpen = !m_PrismOpen;
+		if(!m_PrismOpen)
+			Ui()->ClosePopupMenus();
+		Ui()->SetActiveItem(nullptr);
+		Ui()->SetHotItem(nullptr);
+		Ui()->ClearHotkeys();
+		if(m_PrismOpen)
+			GameClient()->OnRelease();
+		return true;
+	}
+	if(m_PrismOpen)
+	{
+		if((Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_ESCAPE)
+		{
+			if(Ui()->IsPopupOpen())
+			{
+				Ui()->ClosePopupMenus();
+				Ui()->ClearHotkeys();
+				return true;
+			}
+			m_PrismOpen = false;
+			Ui()->SetActiveItem(nullptr);
+			Ui()->ClearHotkeys();
+			return true;
+		}
+		Ui()->OnInput(Event);
+		return true;
+	}
+	// Escape key is always handled to activate/deactivate the original menu.
+	if(((Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_ESCAPE) || IsActive())
 	{
 		Ui()->OnInput(Event);
 		return true;
@@ -2314,6 +2351,8 @@ bool CMenus::OnInput(const IInput::CEvent &Event)
 
 void CMenus::OnStateChange(int NewState, int OldState)
 {
+	m_PrismOpen = false;
+	m_PrismTransition = 0.0f;
 	// reset active item
 	Ui()->SetActiveItem(nullptr);
 
@@ -2370,6 +2409,29 @@ void CMenus::OnRender()
 		Client()->Disconnect();
 		SetActive(true);
 		PopupMessage(Localize("Disconnected"), Localize("The server is running a non-standard tuning on a pure game type."), Localize("Ok"));
+	}
+
+	// Prism is rendered after the world but before normal DDNet menus. Its input
+	// is captured by OnInput/OnCursorMove, never forwarded to movement controls.
+	if((m_PrismOpen || m_PrismTransition > 0.0f) &&
+		(Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK))
+	{
+		Ui()->MapScreen();
+		Ui()->StartCheck();
+		UpdateColors();
+		Ui()->Update();
+		if(m_PrismOpen && !Ui()->IsPopupOpen() && Ui()->ConsumeHotkey(CUi::HOTKEY_TAB))
+		{
+			m_PrismCategory = (m_PrismCategory + 1) % 6;
+			Ui()->SetActiveItem(nullptr);
+		}
+		RenderSettingsPrism(*Ui()->Screen());
+		Ui()->RenderPopupMenus();
+		if(m_PrismOpen)
+			RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
+		Ui()->FinishCheck();
+		Ui()->ClearHotkeys();
+		return;
 	}
 
 	if(!IsActive())

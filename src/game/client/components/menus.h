@@ -141,6 +141,9 @@ protected:
 	int m_Popup;
 	bool m_ShowStart;
 	bool m_MenuActive;
+	bool m_PrismOpen = false;
+	float m_PrismTransition = 0.0f;
+	int m_PrismCategory = 0;
 
 	bool m_DummyNamePlatePreview = false;
 
@@ -711,7 +714,6 @@ public:
 		SETTINGS_DDNET,
 		SETTINGS_ASSETS,
 		SETTINGS_CREDITS,
-		SETTINGS_PRISM,
 
 		SETTINGS_LENGTH,
 	};

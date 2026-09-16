@@ -1,9 +1,9 @@
 name: Prism Windows
 on:
   push:
-    branches: [feature/prism-v0.1.0-windows, main]
+    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, main]
   pull_request:
-    branches: [main]
+    branches: [feature/prism-v0.1.0-windows, main]
 permissions:
   contents: read
 concurrency:
@@ -43,4 +43,3 @@ jobs:
           name: ${{ steps.package.outputs.artifact_name }}
           path: dist/*
           if-no-files-found: error
-

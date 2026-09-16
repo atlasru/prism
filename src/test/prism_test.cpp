@@ -122,3 +122,43 @@ TEST_F(PrismConfig, ResetDoesNotTouchUnrelatedSettings)
  EXPECT_EQ(m_Config.m_PrismPreset, Prism::DEFAULT);
  EXPECT_EQ(m_Config.m_ClPredict, 1);
 }
+TEST_F(PrismConfig, OverlayPreferencesClampAndBecomeCustom)
+{
+ Prism::ApplyPreset(m_Config, Prism::CINEMATIC);
+ m_Console.ExecuteLine("prism_menu_scale 9999");
+ m_Console.ExecuteLine("prism_panel_opacity -100");
+ m_Console.ExecuteLine("prism_reduced_motion 8");
+ Prism::Validate(m_Config);
+ EXPECT_EQ(m_Config.m_PrismMenuScale, 120);
+ EXPECT_EQ(m_Config.m_PrismPanelOpacity, 50);
+ EXPECT_EQ(m_Config.m_PrismReducedMotion, 1);
+ EXPECT_EQ(m_Config.m_PrismPreset, Prism::CUSTOM);
+ Prism::ApplyPreset(m_Config, Prism::DEFAULT);
+ EXPECT_EQ(m_Config.m_PrismEnabled, 0);
+ EXPECT_EQ(m_Config.m_PrismMenuScale, 100);
+ EXPECT_EQ(m_Config.m_PrismPanelOpacity, 85);
+ EXPECT_EQ(m_Config.m_PrismReducedMotion, 0);
+}
+TEST_F(PrismConfig, OverlayPreferencesSurviveConsoleSerialization)
+{
+ Prism::ApplyPreset(m_Config, Prism::CLEAN);
+ m_Console.ExecuteLine("prism_menu_scale 112");
+ m_Console.ExecuteLine("prism_panel_opacity 76");
+ m_Console.ExecuteLine("prism_reduced_motion 1");
+ Prism::Validate(m_Config);
+ EXPECT_EQ(m_Config.m_PrismPreset, Prism::CUSTOM);
+ std::vector<std::string> Lines;
+ for(auto &Variable : m_Variables)
+ {
+  char aLine[256];
+  Variable->Serialize(aLine, sizeof(aLine));
+  Lines.emplace_back(aLine);
+ }
+ Prism::Reset(m_Config);
+ for(const auto &Line : Lines) m_Console.ExecuteLine(Line.c_str());
+ Prism::Validate(m_Config);
+ EXPECT_EQ(m_Config.m_PrismMenuScale, 112);
+ EXPECT_EQ(m_Config.m_PrismPanelOpacity, 76);
+ EXPECT_EQ(m_Config.m_PrismReducedMotion, 1);
+ EXPECT_EQ(m_Config.m_PrismPreset, Prism::CUSTOM);
+}
