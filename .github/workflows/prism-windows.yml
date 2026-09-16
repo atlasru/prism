@@ -22,9 +22,9 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - name: Configure
-        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_${{ matrix.configuration == 'Release' && 'RELEASE' || 'DEBUG' }}=. -DDOWNLOAD_GTEST=ON -DCLIENT=ON -DSERVER=OFF -DTOOLS=OFF -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_${{ matrix.configuration == 'Release' && 'RELEASE' || 'DEBUG' }}=. -DDOWNLOAD_GTEST=ON -DCLIENT=ON -DSERVER=ON -DTOOLS=OFF -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF
       - name: Build client and tests
-        run: cmake --build build --config ${{ matrix.configuration }} --target game-client tests --parallel 4
+        run: cmake --build build --config ${{ matrix.configuration }} --target game-client testrunner --parallel 4
       - name: Run tests
         run: cmake --build build --config ${{ matrix.configuration }} --target run_tests
       - name: Package
