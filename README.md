@@ -4,18 +4,19 @@ Prism is an open-source Windows 10/11 x64 client based on **DDRaceNetwork (DDNet
 
 ## Features
 
-- Native **Settings → Prism** page with General, Tee, Hook and Performance categories, dark neutral panels and scrollable controls.
-- Separate local/other-player Tee outlines (color, width) and optional layered glow (color, intensity). Supports 0.6 and 0.7 body/feet skin silhouettes.
-- Separate local/other-player hook tint and optional glow, using the original interpolated endpoints.
-- Default, Clean, Competitive, Cinematic and Custom presets. Editing a built-in preset selects Custom.
-- Immediate global visual toggle and reset. Optional FPS / average frame-time display using DDNet timing.
+- Dedicated **Insert** overlay available in-game, separate from legacy DDNet Settings. Six functional areas: General, Presets, Tee, Hook, Interface, Performance. Press Insert or Escape to close. Tab moves between sections.
+- Lightweight frosted-glass approximation with translucent layered panels, rounded geometry, short transitions, and subtle hover/toggle feedback. Interface controls adjust menu scale (80–120%), glass opacity (50–100%), and reduced motion. True framebuffer blur is not implemented.
+- Separate local/other-player Tee outlines (color, width) and feathered glow (color, intensity). Supports 0.6 and 0.7 body/feet skin silhouettes.
+- Separate local/other-player Hook tint and feathered glow, using original interpolated endpoints. Hook physics, collisions, and reach are unmodified.
+- Default, Clean, Competitive, Cinematic and Custom presets. Editing a built-in preset selects Custom; Default restores stock-like visuals.
+- Immediate global visual toggle and reset. Optional FPS / average frame-time overlay using existing DDNet timing.
 - Existing DDNet navigation, gameplay, protocol, demos and editor retained. No automated gameplay or new network data.
 
 ## Windows installation
 
 Download the ZIP from a successful **Prism Windows** GitHub Actions run. Extract the **entire archive**, then start `Prism.exe` inside the extracted folder. Keep `data`, DLLs and license notices beside it. Windows 10/11 x64 and an OpenGL-capable graphics driver are required. CI packages use OpenGL, not Vulkan. Executables are unsigned.
 
-Prism starts with original DDNet visuals. Select Clean or enable effects under Settings → Prism. `prism_toggle` in F1 toggles effects; `bind f8 prism_toggle` assigns a shortcut without replacing any binding automatically. `prism_apply_preset 0` restores Default; IDs 1–4 select Clean, Competitive, Cinematic and Custom. `prism_reset` resets Prism only.
+Prism starts with original DDNet visuals. Join a server and press **Insert** to open Prism; choose Clean or enable effects. `prism_toggle` in F1 toggles effects; `bind f8 prism_toggle` assigns a shortcut without replacing any binding automatically. `prism_apply_preset 0` restores Default; IDs 1–4 select Clean, Competitive, Cinematic and Custom. `prism_reset` resets Prism only.
 
 Settings use DDNet's configuration system and are saved as `settings_prism.cfg` in DDNet's normal user directory (normally `%APPDATA%/DDNet` on Windows). `settings_ddnet.cfg` is not overwritten. Assets and demos can remain shared. Existing `autoexec` files still run as in DDNet.
 
@@ -26,7 +27,7 @@ Requires Git, CMake, Python 3, Rust (at least 1.85) and Visual Studio 2022 with 
 ```powershell
 git clone --recurse-submodules https://github.com/atlasru/prism.git
 cd prism
-git switch feature/prism-v0.1.0-windows
+git switch feature/prism-overlay-ui
 git submodule update --init --recursive
 cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=. -DDOWNLOAD_GTEST=ON -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF -DTOOLS=OFF
 cmake --build build --config Release --target game-client testrunner --parallel 4
