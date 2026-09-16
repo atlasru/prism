@@ -43,6 +43,7 @@ int unsigned *CSkins7::ms_apColorVariables[NUM_DUMMIES][protocol7::NUM_SKINPARTS
 void CSkins7::CSkinPart::ApplyTo(CTeeRenderInfo::CSixup &SixupRenderInfo) const
 {
 	SixupRenderInfo.m_aOriginalTextures[m_Type] = m_OriginalTexture;
+	SixupRenderInfo.m_aPrismMasks[m_Type] = m_PrismMask;
 	SixupRenderInfo.m_aColorableTextures[m_Type] = m_ColorableTexture;
 	if(m_Type == protocol7::SKINPART_BODY)
 	{
@@ -160,6 +161,13 @@ bool CSkins7::LoadSkinPart(int PartType, const char *pName, int DirType)
 		Part.m_Flags |= SKINFLAG_STANDARD;
 	}
 	str_copy(Part.m_aName, pName, std::min(PartNameSize + 1, sizeof(Part.m_aName)));
+ if(PartType == protocol7::SKINPART_BODY || PartType == protocol7::SKINPART_FEET)
+ {
+  CImageInfo Mask = Info.DeepCopy();
+  for(size_t i = 0; i < (size_t)Mask.m_Width * Mask.m_Height; ++i)
+   Mask.m_pData[i * 4] = Mask.m_pData[i * 4 + 1] = Mask.m_pData[i * 4 + 2] = 255;
+  Part.m_PrismMask = Graphics()->LoadTextureRawMove(Mask, 0, "Prism skin silhouette");
+ }
 	Part.m_OriginalTexture = Graphics()->LoadTextureRaw(Info, 0, aFilename);
 	Part.m_BloodColor = DetermineBloodColor(Part.m_Type, Info);
 	ConvertToGrayscale(Info);
@@ -381,6 +389,7 @@ void CSkins7::InitPlaceholderSkinParts()
 		SkinPart.m_Flags = SKINFLAG_STANDARD;
 		str_copy(SkinPart.m_aName, "dummy");
 		SkinPart.m_OriginalTexture.Invalidate();
+		SkinPart.m_PrismMask.Invalidate();
 		SkinPart.m_ColorableTexture.Invalidate();
 		SkinPart.m_BloodColor = ColorRGBA(1.0f, 1.0f, 1.0f, 1.0f);
 	}
@@ -395,6 +404,7 @@ void CSkins7::Refresh(TSkinLoadedCallback &&SkinLoadedCallback)
 		for(CSkinPart &SkinPart : m_avSkinParts[Part])
 		{
 			Graphics()->UnloadTexture(&SkinPart.m_OriginalTexture);
+			Graphics()->UnloadTexture(&SkinPart.m_PrismMask);
 			Graphics()->UnloadTexture(&SkinPart.m_ColorableTexture);
 		}
 		m_avSkinParts[Part].clear();
@@ -717,3 +727,4 @@ bool CSkins7::SaveSkinfile(const char *pName, int Dummy)
 	AddSkinFromConfigVariables(pName, Dummy);
 	return true;
 }
+

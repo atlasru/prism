@@ -2,6 +2,7 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 
 #include "gameclient.h"
+#include "prism.h"
 
 #include "components/background.h"
 #include "components/binds.h"
@@ -105,6 +106,19 @@ void CGameClient::OnConsoleInit()
 	m_pConfig = m_pConfigManager->Values();
 	m_pInput = Kernel()->RequestInterface<IInput>();
 	m_pConsole = Kernel()->RequestInterface<IConsole>();
+ Console()->Register("prism_apply_preset", "i[preset]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) { Prism::ApplyPreset(g_Config, pResult->GetInteger(0)); }, this, "Apply Prism preset: 0 Default, 1 Clean, 2 Competitive, 3 Cinematic, 4 Custom");
+ Console()->Register("prism_toggle", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { g_Config.m_PrismEnabled ^= 1; Prism::Validate(g_Config); }, this, "Toggle Prism visuals without changing DDNet settings");
+ Console()->Register("prism_reset", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { Prism::Reset(g_Config); }, this, "Reset all Prism settings");
+ auto PrismChanged = [](IConsole::IResult *pResult, void *, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
+  pfnCallback(pResult, pCallbackUserData);
+  if(pResult->NumArguments()) Prism::Validate(g_Config);
+ };
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) Console()->Chain(#ScriptName, PrismChanged, this);
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) Console()->Chain(#ScriptName, PrismChanged, this);
+#include <engine/shared/prism_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
+
 	m_pStorage = Kernel()->RequestInterface<IStorage>();
 	m_pDemoPlayer = Kernel()->RequestInterface<IDemoPlayer>();
 	m_pServerBrowser = Kernel()->RequestInterface<IServerBrowser>();
@@ -347,11 +361,11 @@ void CGameClient::OnInit()
 
 	if(GIT_SHORTREV_HASH)
 	{
-		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "%s %s (%s)", GAME_NAME, GAME_RELEASE_VERSION, GIT_SHORTREV_HASH);
+		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism 0.1.0 / DDNet %s (%s)", GAME_RELEASE_VERSION, GIT_SHORTREV_HASH);
 	}
 	else
 	{
-		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "%s %s", GAME_NAME, GAME_RELEASE_VERSION);
+		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism 0.1.0 / DDNet %s", GAME_RELEASE_VERSION);
 	}
 
 	// TODO: this should be different
@@ -776,6 +790,7 @@ void CGameClient::UpdatePositions()
 
 void CGameClient::OnRender()
 {
+	Prism::Validate(g_Config);
 	const ColorRGBA ClearColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_ClOverlayEntities ? g_Config.m_ClBackgroundEntitiesColor : g_Config.m_ClBackgroundColor));
 	Graphics()->Clear(ClearColor.r, ClearColor.g, ClearColor.b);
 
@@ -5345,3 +5360,4 @@ void CGameClient::StoreSave(const char *pTeamMembers, const char *pGeneratedCode
 	CsvWrite(File, std::size(SAVES_HEADER), apColumns);
 	io_close(File);
 }
+

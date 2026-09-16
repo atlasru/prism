@@ -1,3 +1,4 @@
+#include <algorithm>
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "menus.h"
@@ -51,13 +52,15 @@ void CMenus::RenderSettings(CUIRect MainView)
 		Localize("Sound"),
 		Localize("DDNet"),
 		Localize("Assets"),
-		Localize("Credits")};
+		Localize("Credits"),
+		"Prism"};
 	static CButtonContainer s_aTabButtons[SETTINGS_LENGTH];
 
+	const float TabHeight = std::min(26.0f, (TabBar.h - 4.0f * SETTINGS_LENGTH) / SETTINGS_LENGTH);
 	for(int i = 0; i < SETTINGS_LENGTH; i++)
 	{
-		TabBar.HSplitTop(10.0f, nullptr, &TabBar);
-		TabBar.HSplitTop(26.0f, &Button, &TabBar);
+		TabBar.HSplitTop(4.0f, nullptr, &TabBar);
+		TabBar.HSplitTop(TabHeight, &Button, &TabBar);
 		if(DoButton_MenuTab(&s_aTabButtons[i], apTabs[i], g_Config.m_UiSettingsPage == i, &Button, IGraphics::CORNER_R, &m_aAnimatorsSettingsTab[i]))
 			g_Config.m_UiSettingsPage = i;
 	}
@@ -119,6 +122,10 @@ void CMenus::RenderSettings(CUIRect MainView)
 	{
 		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_CREDITS);
 		RenderSettingsCredits(MainView);
+	}
+	else if(g_Config.m_UiSettingsPage == SETTINGS_PRISM)
+	{
+		RenderSettingsPrism(MainView);
 	}
 	else
 	{
@@ -407,3 +414,4 @@ bool CMenus::RenderHslaScrollbars(CUIRect *pRect, unsigned int *pColor, bool Alp
 	}
 	return PrevPackedColor != *pColor;
 }
+

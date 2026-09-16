@@ -1,3 +1,4 @@
+#include <algorithm>
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "render.h"
@@ -583,4 +584,63 @@ void CRenderTools::RenderTee6(const CAnimState *pAnim, const CTeeRenderInfo *pIn
 			Graphics()->RenderQuadContainerAsSprite(m_TeeQuadContainerIndex, QuadOffset, Position.x + pFoot->m_X * AnimScale, Position.y + pFoot->m_Y * AnimScale, w / 64.f, h / 32.f);
 		}
 	}
+}
+
+
+// Prism only consumes interpolated render inputs; no gameplay state is accessed.
+void CRenderTools::RenderPrismTee(const CAnimState *pAnim, const CTeeRenderInfo *pInfo, vec2 Dir, vec2 Pos, float Alpha, bool Local) const
+{
+ if(!g_Config.m_PrismEnabled || Alpha <= 0.0f) return;
+ const bool Outline = Local ? g_Config.m_PrismLocalOutline : g_Config.m_PrismOtherOutline;
+ const bool Glow = Local ? g_Config.m_PrismLocalGlow : g_Config.m_PrismOtherGlow;
+ if(!Outline && !Glow) return;
+ const float Width = std::clamp(Local ? g_Config.m_PrismLocalOutlineWidth : g_Config.m_PrismOtherOutlineWidth, 1, 8);
+ const float Intensity = std::clamp(Local ? g_Config.m_PrismLocalGlowIntensity : g_Config.m_PrismOtherGlowIntensity, 0, 100) / 100.0f;
+ const auto OutlineColor = color_cast<ColorRGBA>(ColorHSLA(Local ? g_Config.m_PrismLocalOutlineColor : g_Config.m_PrismOtherOutlineColor));
+ const auto GlowColor = color_cast<ColorRGBA>(ColorHSLA(Local ? g_Config.m_PrismLocalGlowColor : g_Config.m_PrismOtherGlowColor));
+ const bool Sixup = pInfo->m_aSixup[g_Config.m_ClDummy].PartTexture(protocol7::SKINPART_BODY).IsValid();
+ float AnimScale, BaseSize;
+ GetRenderTeeAnimScaleAndBaseSize(pInfo, AnimScale, BaseSize);
+ if(Sixup) { AnimScale = pInfo->m_Size / 64.0f; BaseSize = pInfo->m_Size; }
+ auto Layer = [&](ColorRGBA Color, float Expansion) {
+  auto Part = [&](const CAnimKeyframe *pFrame, bool Body) {
+   const vec2 Position = Pos + vec2(pFrame->m_X, pFrame->m_Y) * AnimScale;
+   const auto Texture = Sixup ? pInfo->m_aSixup[g_Config.m_ClDummy].m_aPrismMasks[Body ? protocol7::SKINPART_BODY : protocol7::SKINPART_FEET] :
+    (Body ? pInfo->m_OriginalRenderSkin.m_PrismBodyMask : pInfo->m_OriginalRenderSkin.m_PrismFeetMask);
+   if(!Texture.IsValid()) return;
+   Graphics()->TextureSet(Texture);
+   if(Sixup)
+   {
+    Graphics()->QuadsBegin();
+    Graphics()->QuadsSetRotation(pFrame->m_Angle * pi * 2);
+    Graphics()->SetColor(Color.WithMultipliedAlpha(Alpha));
+    Graphics()->SelectSprite7(Body ? client_data7::SPRITE_TEE_BODY_OUTLINE : client_data7::SPRITE_TEE_FOOT_OUTLINE);
+    float Size = Body ? BaseSize : BaseSize / 2.1f;
+    IGraphics::CQuadItem Item(Position.x, Position.y, Size + 2 * Expansion, Size + 2 * Expansion);
+    Graphics()->QuadsDraw(&Item, 1);
+    Graphics()->QuadsEnd();
+   }
+   else
+   {
+    Graphics()->QuadsSetRotation(pFrame->m_Angle * pi * 2);
+    Graphics()->SetColor(Color.WithMultipliedAlpha(Alpha));
+    float Scale;
+    GetRenderTeeBodyScale(BaseSize, Scale);
+    const int Offset = Body ? 1 : (Dir.x < 0 && pInfo->m_FeetFlipped ? 9 : 7);
+    const float ScaleX = Body ? Scale : BaseSize / 64.0f;
+    const float ScaleY = Body ? Scale : BaseSize / 64.0f;
+    Graphics()->RenderQuadContainerAsSprite(m_TeeQuadContainerIndex, Offset, Position.x, Position.y,
+     ScaleX + Expansion / 32.0f, ScaleY + Expansion / (Body ? 32.0f : 16.0f));
+   }
+  };
+  Part(pAnim->GetBackFoot(), false);
+  Part(pAnim->GetBody(), true);
+  Part(pAnim->GetFrontFoot(), false);
+ };
+ // Three bounded alpha layers approximate a halo with no framebuffer or shader dependency.
+ if(Glow && Intensity > 0.0f)
+  for(int i = 3; i >= 1; --i) Layer(GlowColor.WithAlpha(Intensity * 0.13f), (2.0f + i * 3.0f) * AnimScale);
+ if(Outline) Layer(OutlineColor, Width * AnimScale);
+ Graphics()->QuadsSetRotation(0);
+ Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
 }

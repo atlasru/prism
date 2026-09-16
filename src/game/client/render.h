@@ -143,6 +143,7 @@ public:
 	public:
 		void Reset()
 		{
+			for(auto &Texture : m_aPrismMasks) Texture.Invalidate();
 			for(auto &Texture : m_aOriginalTextures)
 			{
 				Texture.Invalidate();
@@ -161,6 +162,7 @@ public:
 		}
 
 		IGraphics::CTextureHandle m_aOriginalTextures[protocol7::NUM_SKINPARTS];
+		IGraphics::CTextureHandle m_aPrismMasks[protocol7::NUM_SKINPARTS];
 		IGraphics::CTextureHandle m_aColorableTextures[protocol7::NUM_SKINPARTS];
 		bool m_aUseCustomColors[protocol7::NUM_SKINPARTS];
 		ColorRGBA m_aColors[protocol7::NUM_SKINPARTS];
@@ -238,6 +240,8 @@ public:
 	static void GetRenderTeeOffsetToRenderedTee(const CAnimState *pAnim, const CTeeRenderInfo *pInfo, vec2 &TeeOffsetToMid);
 	// object render methods
 	void RenderTee(const CAnimState *pAnim, const CTeeRenderInfo *pInfo, int Emote, vec2 Dir, vec2 Pos, float Alpha = 1.0f) const;
+	void RenderPrismTee(const CAnimState *pAnim, const CTeeRenderInfo *pInfo, vec2 Dir, vec2 Pos, float Alpha, bool Local) const;
 };
 
 #endif
+

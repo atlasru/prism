@@ -441,6 +441,14 @@ void CSkins::LoadSkinFinish(CSkinContainer *pSkinContainer, const CSkinLoadData 
 		Skin.m_ColorableSkin.m_aEyes[i] = Graphics()->LoadSpriteTexture(Data.m_InfoGrayscale, std::nullopt, &g_pData->m_aSprites[SPRITE_TEE_EYE_NORMAL + i]);
 	}
 
+ // Create reusable white silhouette masks once per skin, never per frame.
+ // Preserve alpha: multiplication cannot tint the original black outlines.
+ CImageInfo Mask = Data.m_Info.DeepCopy();
+ for(size_t i = 0; i < (size_t)Mask.m_Width * Mask.m_Height; ++i)
+  Mask.m_pData[i * 4] = Mask.m_pData[i * 4 + 1] = Mask.m_pData[i * 4 + 2] = 255;
+ Skin.m_OriginalSkin.m_PrismBodyMask = Graphics()->LoadSpriteTexture(Mask, std::nullopt, &g_pData->m_aSprites[SPRITE_TEE_BODY_OUTLINE]);
+ Skin.m_OriginalSkin.m_PrismFeetMask = Graphics()->LoadSpriteTexture(Mask, std::nullopt, &g_pData->m_aSprites[SPRITE_TEE_FOOT_OUTLINE]);
+ Mask.Free();
 	Skin.m_Metrics = Data.m_Metrics;
 	Skin.m_BloodColor = Data.m_BloodColor;
 
@@ -1142,3 +1150,4 @@ void CSkins::ConchainRefreshSkinList(IConsole::IResult *pResult, void *pUserData
 		pThis->m_SkinList.ForceRefresh();
 	}
 }
+

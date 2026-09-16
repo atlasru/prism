@@ -1,3 +1,4 @@
+#include <algorithm>
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 
@@ -534,11 +535,37 @@ void CPlayers::RenderHook(
 	float d = distance(Pos, HookPos);
 	vec2 Dir = normalize(Pos - HookPos);
 
+ // Render-only hook accents use the exact same interpolated endpoints.
+ const bool PrismActive = g_Config.m_PrismEnabled && ClientId >= 0;
+ const bool Local = ClientId == GameClient()->m_Snap.m_LocalClientId;
+ ColorRGBA HookColor(1.0f, 1.0f, 1.0f, Alpha);
+ if(PrismActive)
+ {
+  const auto Accent = color_cast<ColorRGBA>(ColorHSLA(Local ? g_Config.m_PrismLocalHookColor : g_Config.m_PrismOtherHookColor));
+  if(Local ? g_Config.m_PrismLocalHook : g_Config.m_PrismOtherHook) HookColor = Accent.WithAlpha(Alpha);
+  const bool Glow = Local ? g_Config.m_PrismLocalHookGlow : g_Config.m_PrismOtherHookGlow;
+  const float Intensity = std::clamp(Local ? g_Config.m_PrismLocalHookIntensity : g_Config.m_PrismOtherHookIntensity, 0, 100) / 100.0f;
+  if(Glow && Intensity > 0.0f && d > 0.001f)
+  {
+   const vec2 Normal(-Dir.y, Dir.x);
+   Graphics()->TextureClear();
+   Graphics()->QuadsBegin();
+   Graphics()->QuadsSetRotation(0);
+   Graphics()->SetColor(Accent.WithAlpha(Alpha * Intensity * 0.13f));
+   for(int i = 3; i >= 1; --i)
+   {
+    const vec2 Offset = Normal * (2.0f + i * 2.0f);
+    IGraphics::CFreeformItem Item(HookPos - Offset, HookPos + Offset, Pos - Offset, Pos + Offset);
+    Graphics()->QuadsDrawFreeform(&Item, 1);
+   }
+   Graphics()->QuadsEnd();
+  }
+ }
 	Graphics()->TextureSet(GameClient()->m_GameSkin.m_SpriteHookHead);
 	Graphics()->QuadsSetRotation(angle(Dir) + pi);
 	// render head
 	int QuadOffset = NUM_WEAPONS * 2 + 2;
-	Graphics()->SetColor(1.0f, 1.0f, 1.0f, Alpha);
+	Graphics()->SetColor(HookColor);
 	Graphics()->RenderQuadContainerAsSprite(m_WeaponEmoteQuadContainerIndex, QuadOffset, HookPos.x, HookPos.y);
 
 	// render chain
@@ -863,6 +890,8 @@ void CPlayers::RenderPlayer(
 		RenderTools()->RenderTee(&State, &RenderInfo, Player.m_Emote, Direction, ShadowPosition, g_Config.m_ClUnpredictedShadowAlpha / 100.f); // render ghost
 	}
 
+	if(g_Config.m_PrismEnabled && ClientId >= 0)
+		RenderTools()->RenderPrismTee(&State, &RenderInfo, Direction, Position, Alpha, Local);
 	RenderTools()->RenderTee(&State, &RenderInfo, Player.m_Emote, Direction, Position, Alpha);
 
 	float TeeAnimScale, TeeBaseSize;
@@ -1162,3 +1191,4 @@ void CPlayers::OnInit()
 	CreateNinjaTeeRenderInfo();
 	CreateSpectatorTeeRenderInfo();
 }
+

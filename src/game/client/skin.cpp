@@ -9,6 +9,8 @@ void CSkin::CSkinTextures::Reset()
 {
 	m_Body = IGraphics::CTextureHandle();
 	m_BodyOutline = IGraphics::CTextureHandle();
+	m_PrismBodyMask.Invalidate();
+	m_PrismFeetMask.Invalidate();
 	m_Feet = IGraphics::CTextureHandle();
 	m_FeetOutline = IGraphics::CTextureHandle();
 	m_Hands = IGraphics::CTextureHandle();
@@ -23,6 +25,8 @@ void CSkin::CSkinTextures::Unload(IGraphics *pGraphics)
 {
 	pGraphics->UnloadTexture(&m_Body);
 	pGraphics->UnloadTexture(&m_BodyOutline);
+	pGraphics->UnloadTexture(&m_PrismBodyMask);
+	pGraphics->UnloadTexture(&m_PrismFeetMask);
 	pGraphics->UnloadTexture(&m_Feet);
 	pGraphics->UnloadTexture(&m_FeetOutline);
 	pGraphics->UnloadTexture(&m_Hands);
@@ -143,3 +147,4 @@ bool CSkin::IsValidName(const char *pName)
 }
 
 const char CSkin::m_aSkinNameRestrictions[] = "Skin names must be valid filenames shorter than 24 characters.";
+

@@ -183,7 +183,11 @@ if(NOT "${CMAKE_CURRENT_BINARY_DIR}" STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 set(SERVER_EXECUTABLE DDNet-Server CACHE STRING "Name of the built server executable")
-set(CLIENT_EXECUTABLE DDNet CACHE STRING "Name of the build client executable")
+if(TARGET_OS STREQUAL "windows")
+  set(CLIENT_EXECUTABLE Prism CACHE STRING "Name of the build client executable")
+else()
+  set(CLIENT_EXECUTABLE DDNet CACHE STRING "Name of the build client executable")
+endif()
 
 ########################################################################
 # Compiler flags
@@ -2195,6 +2199,7 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   config.cpp
   config.h
   config_variables.h
+  prism_variables.h
   console.cpp
   console.h
   csv.cpp
@@ -2551,6 +2556,7 @@ if(CLIENT)
     components/menus_ingame_touch_controls.cpp
     components/menus_ingame_touch_controls.h
     components/menus_settings.cpp
+    components/menus_settings_prism.cpp
     components/menus_settings_appearance.cpp
     components/menus_settings_assets.cpp
     components/menus_settings_controls.cpp
@@ -2624,6 +2630,7 @@ if(CLIENT)
     projectile_data.h
     race.cpp
     race.h
+    prism.h
     render.cpp
     render.h
     sixup_translate_connless.cpp
@@ -3273,6 +3280,7 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     network_test.cpp
     os_test.cpp
     packer_test.cpp
+    prism_test.cpp
     prng_test.cpp
     replace_words_test.cpp
     score_test.cpp
@@ -3438,7 +3446,7 @@ function(regex_inverted VAR)
   set(${VAR} ${RESULT} PARENT_SCOPE)
 endfunction()
 
-set(CPACK_PACKAGE_NAME ${PROJECT_NAME})
+set(CPACK_PACKAGE_NAME Prism)
 set(CPACK_GENERATOR TGZ TXZ)
 set(CPACK_ARCHIVE_COMPONENT_INSTALL ON)
 if(TARGET_OS STREQUAL "mac")
@@ -3455,7 +3463,7 @@ set(CPACK_SOURCE_GENERATOR ZIP TGZ TBZ2 TXZ)
 set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
 set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
-set(CPACK_PACKAGE_VERSION ${VERSION})
+set(CPACK_PACKAGE_VERSION 0.1.0)
 set(CPACK_SYSTEM_NAME ${CMAKE_SYSTEM_NAME})
 
 if(TARGET_OS AND TARGET_BITS)
@@ -3569,6 +3577,9 @@ endif()
 list(APPEND CPACK_DIRS ${COPY_DIRS})
 set(CPACK_FILES
   license.txt
+  README.md
+  FOUNDATION.md
+  VALIDATION.md
   ${COPY_FILES}
 )
 if(NOT TARGET_OS STREQUAL "emscripten")
@@ -4075,3 +4086,4 @@ foreach(target ${TARGETS_DEP})
     target_compile_options(${target} PRIVATE ${OUR_FLAGS_DEP})
   endif()
 endforeach()
+

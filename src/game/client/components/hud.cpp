@@ -1,3 +1,4 @@
+#include <algorithm>
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "hud.h"
@@ -547,16 +548,19 @@ void CHud::RenderWarmupTimer()
 
 void CHud::RenderTextInfo()
 {
-	int Showfps = g_Config.m_ClShowfps;
+	const bool PrismOverlay = g_Config.m_PrismEnabled && g_Config.m_PrismOverlay;
+	int Showfps = g_Config.m_ClShowfps || PrismOverlay;
 #if defined(CONF_VIDEORECORDER)
 	if(IVideo::Current())
 		Showfps = 0;
 #endif
 	if(Showfps)
 	{
-		char aBuf[16];
-		const int FramesPerSecond = round_to_int(1.0f / Client()->FrameTimeAverage());
-		str_format(aBuf, sizeof(aBuf), "%d", FramesPerSecond);
+		char aBuf[64];
+  const float FrameTime = std::max(Client()->FrameTimeAverage(), 0.000001f);
+  const int FramesPerSecond = round_to_int(1.0f / FrameTime);
+  if(PrismOverlay) str_format(aBuf, sizeof(aBuf), "%d FPS | %.2f ms", FramesPerSecond, FrameTime * 1000.0f);
+  else str_format(aBuf, sizeof(aBuf), "%d", FramesPerSecond);
 
 		static float s_TextWidth0 = TextRender()->TextWidth(12.f, "0", -1, -1.0f);
 		static float s_TextWidth00 = TextRender()->TextWidth(12.f, "00", -1, -1.0f);
@@ -568,14 +572,14 @@ void CHud::RenderTextInfo()
 		int DigitIndex = GetDigitsIndex(FramesPerSecond, 4);
 
 		CTextCursor Cursor;
-		Cursor.SetPosition(vec2(m_Width - 10 - s_aTextWidth[DigitIndex], 5));
+		Cursor.SetPosition(vec2(m_Width - 10 - (PrismOverlay ? TextRender()->TextWidth(12.0f, aBuf) : s_aTextWidth[DigitIndex]), 5));
 		Cursor.m_FontSize = 12.0f;
 		auto OldFlags = TextRender()->GetRenderFlags();
 		TextRender()->SetRenderFlags(OldFlags | TEXT_RENDER_FLAG_ONE_TIME_USE);
 		if(m_FPSTextContainerIndex.Valid())
 			TextRender()->RecreateTextContainerSoft(m_FPSTextContainerIndex, &Cursor, aBuf);
 		else
-			TextRender()->CreateTextContainer(m_FPSTextContainerIndex, &Cursor, "0");
+			TextRender()->CreateTextContainer(m_FPSTextContainerIndex, &Cursor, aBuf);
 		TextRender()->SetRenderFlags(OldFlags);
 		if(m_FPSTextContainerIndex.Valid())
 		{
@@ -1932,3 +1936,4 @@ void CHud::RenderRecord()
 		}
 	}
 }
+
