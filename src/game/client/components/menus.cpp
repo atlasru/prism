@@ -2308,11 +2308,28 @@ bool CMenus::OnCursorMove(float x, float y, IInput::ECursorType CursorType)
 
 bool CMenus::OnInput(const IInput::CEvent &Event)
 {
+	if(m_PrismOpen && m_PrismCaptureBind >= 0 && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
+	{
+		int *apBind[] = {&g_Config.m_PrismDoubleBind, &g_Config.m_PrismStopBind,
+			&g_Config.m_PrismMacro1Bind, &g_Config.m_PrismMacro2Bind,
+			&g_Config.m_PrismMacro3Bind, &g_Config.m_PrismMacro4Bind};
+		if(m_PrismCaptureBind < 6)
+		{
+			if(Event.m_Key == KEY_ESCAPE || Event.m_Key == KEY_BACKSPACE)
+				*apBind[m_PrismCaptureBind] = 0;
+			else if(Event.m_Key != KEY_INSERT && Event.m_Key != KEY_F12)
+				*apBind[m_PrismCaptureBind] = Event.m_Key;
+		}
+		m_PrismCaptureBind = -1;
+		return true;
+	}
+
 	const bool Playing = Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK;
 	if(Playing && m_Popup == POPUP_NONE && (m_PrismOpen || !IsActive()) &&
 		(Event.m_Flags & IInput::FLAG_PRESS) && Event.m_Key == KEY_INSERT)
 	{
 		m_PrismOpen = !m_PrismOpen;
+		m_PrismCaptureBind = -1;
 		if(!m_PrismOpen)
 			Ui()->ClosePopupMenus();
 		Ui()->SetActiveItem(nullptr);
@@ -2422,7 +2439,7 @@ void CMenus::OnRender()
 		Ui()->Update();
 		if(m_PrismOpen && !Ui()->IsPopupOpen() && Ui()->ConsumeHotkey(CUi::HOTKEY_TAB))
 		{
-			m_PrismCategory = (m_PrismCategory + 1) % 6;
+			m_PrismCategory = (m_PrismCategory + 1) % 7;
 			Ui()->SetActiveItem(nullptr);
 		}
 		RenderSettingsPrism(*Ui()->Screen());

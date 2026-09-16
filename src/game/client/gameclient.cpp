@@ -62,6 +62,7 @@
 #include <engine/favorites.h>
 #include <engine/friends.h>
 #include <engine/graphics.h>
+#include <engine/keys.h>
 #include <engine/map.h>
 #include <engine/serverbrowser.h>
 #include <engine/shared/config.h>
@@ -109,6 +110,7 @@ void CGameClient::OnConsoleInit()
  Console()->Register("prism_apply_preset", "i[preset]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) { Prism::ApplyPreset(g_Config, pResult->GetInteger(0)); }, this, "Apply Prism preset: 0 Default, 1 Clean, 2 Competitive, 3 Cinematic, 4 Custom");
  Console()->Register("prism_toggle", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { g_Config.m_PrismEnabled ^= 1; Prism::Validate(g_Config); }, this, "Toggle Prism visuals without changing DDNet settings");
  Console()->Register("prism_reset", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { Prism::Reset(g_Config); }, this, "Reset all Prism settings");
+ Console()->Register("prism_emergency_stop", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *pUserData) { static_cast<CGameClient *>(pUserData)->PrismEmergencyStop(); }, this, "Stop Double Tee and all active macros, releasing owned controls");
  auto PrismChanged = [](IConsole::IResult *pResult, void *, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
   pfnCallback(pResult, pCallbackUserData);
   if(pResult->NumArguments()) Prism::Validate(g_Config);
@@ -469,6 +471,17 @@ void CGameClient::OnInit()
 void CGameClient::OnUpdate()
 {
 	HandleLanguageChanged();
+	const bool CanRunPrism = Client()->State() == IClient::STATE_ONLINE &&
+		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() &&
+		!m_Menus.IsActive() && !m_Chat.IsActive() && !DemoPlayer()->IsPlaying();
+	const int64_t PrismTimeMs = time_get() * 1000 / time_freq();
+	m_PrismMacros.Configure(0, g_Config.m_PrismMacro1, g_Config.m_PrismMacro1Bind, g_Config.m_PrismMacro1Mode, g_Config.m_PrismMacro1Enabled != 0);
+	m_PrismMacros.Configure(1, g_Config.m_PrismMacro2, g_Config.m_PrismMacro2Bind, g_Config.m_PrismMacro2Mode, g_Config.m_PrismMacro2Enabled != 0);
+	m_PrismMacros.Configure(2, g_Config.m_PrismMacro3, g_Config.m_PrismMacro3Bind, g_Config.m_PrismMacro3Mode, g_Config.m_PrismMacro3Enabled != 0);
+	m_PrismMacros.Configure(3, g_Config.m_PrismMacro4, g_Config.m_PrismMacro4Bind, g_Config.m_PrismMacro4Mode, g_Config.m_PrismMacro4Enabled != 0);
+	m_PrismMacros.Tick(PrismTimeMs, CanRunPrism);
+	if(!CanRunPrism)
+		m_PrismHammerCounter = 0;
 
 	CUIElementBase::Init(Ui()); // update static pointer because game and editor use separate UI
 
@@ -520,6 +533,28 @@ void CGameClient::OnUpdate()
 
 void CGameClient::OnInput(const IInput::CEvent &Event)
 {
+	const bool Pressed = (Event.m_Flags & IInput::FLAG_PRESS) != 0;
+	const bool Released = (Event.m_Flags & IInput::FLAG_RELEASE) != 0;
+	if(Released)
+		m_PrismMacros.KeyEvent(Event.m_Key, false, false, time_get() * 1000 / time_freq());
+	if(Pressed && !(Event.m_Flags & IInput::FLAG_REPEAT) &&
+		(Event.m_Key == KEY_F12 || (g_Config.m_PrismStopBind && Event.m_Key == g_Config.m_PrismStopBind)) &&
+		Client()->State() == IClient::STATE_ONLINE)
+	{
+		PrismEmergencyStop();
+		return;
+	}
+	if(Pressed && !m_Menus.IsActive() && !m_Chat.IsActive() && Client()->State() == IClient::STATE_ONLINE &&
+		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive())
+	{
+		if(!(Event.m_Flags & IInput::FLAG_REPEAT) && g_Config.m_PrismDoubleBind && Event.m_Key == g_Config.m_PrismDoubleBind)
+		{
+			g_Config.m_PrismDoubleEnabled ^= 1;
+			if(!g_Config.m_PrismDoubleEnabled) m_PrismHammerCounter = 0;
+			return;
+		}
+		m_PrismMacros.KeyEvent(Event.m_Key, true, (Event.m_Flags & IInput::FLAG_REPEAT) != 0, time_get() * 1000 / time_freq());
+	}
 	for(auto &pComponent : m_vpInput)
 	{
 		// Events with flag `FLAG_RELEASE` must always be forwarded to all components so keys being
@@ -527,6 +562,14 @@ void CGameClient::OnInput(const IInput::CEvent &Event)
 		if(pComponent->OnInput(Event) && (Event.m_Flags & ~IInput::FLAG_RELEASE) != 0)
 			break;
 	}
+}
+
+void CGameClient::PrismEmergencyStop()
+{
+	g_Config.m_PrismDoubleEnabled = 0;
+	m_PrismHammerCounter = 0;
+	m_PrismMacros.Cancel();
+	// The next input snapshot releases any previously owned fire counter.
 }
 
 void CGameClient::OnDummySwap()
@@ -554,6 +597,64 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 		return 0;
 	}
 
+	const bool PrismAllowed = Client()->State() == IClient::STATE_ONLINE && Client()->DummyConnected() &&
+		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() && !m_Menus.IsActive() &&
+		!m_Chat.IsActive() && !DemoPlayer()->IsPlaying();
+	const bool Assisted = PrismAllowed && g_Config.m_PrismDoubleEnabled;
+	if(Assisted || m_PrismLastAssisted || m_PrismDummyFireOwned)
+	{
+		CNetObj_PlayerInput Input = m_DummyInput;
+		const int Controlled = g_Config.m_ClDummy;
+		const int Mode = std::clamp(g_Config.m_PrismDoubleMode, 0, 2);
+		if(Assisted && Mode != 1 && (!m_Snap.m_SpecInfo.m_Active || m_Snap.m_SpecInfo.m_SpectatorId < 0))
+		{
+			const auto &Player = m_Controls.m_aInputData[Controlled];
+			Input.m_Direction = Player.m_Direction;
+			Input.m_Jump = Player.m_Jump;
+			Input.m_Hook = Player.m_Hook;
+			Input.m_TargetX = Player.m_TargetX;
+			Input.m_TargetY = Player.m_TargetY;
+			Input.m_PlayerFlags = Player.m_PlayerFlags;
+			if(!g_Config.m_ClDummyControl)
+				Input.m_WantedWeapon = Player.m_WantedWeapon;
+		}
+		bool HammerPulse = false;
+		if(Assisted && Mode != 0)
+		{
+			const int Interval = std::clamp(g_Config.m_PrismDoubleInterval, 5, 100);
+			HammerPulse = m_PrismHammerCounter == 0;
+			m_PrismHammerCounter = (m_PrismHammerCounter + 1) % Interval;
+			if(HammerPulse)
+			{
+				Input.m_WantedWeapon = WEAPON_HAMMER + 1;
+				const vec2 Dir = m_LocalCharacterPos - m_aClients[m_aLocalIds[!Controlled]].m_Predicted.m_Pos;
+				Input.m_TargetX = (int)Dir.x;
+				Input.m_TargetY = (int)Dir.y;
+			}
+		}
+		else m_PrismHammerCounter = 0;
+		if(HammerPulse && !(Input.m_Fire & 1))
+		{
+			m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
+			if(!(m_PrismDummyFire & 1)) m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
+			Input.m_Fire = m_PrismDummyFire;
+			m_PrismDummyFireOwned = true;
+		}
+		else if(m_PrismDummyFireOwned)
+		{
+			if(!(Input.m_Fire & 1))
+			{
+				m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
+				if(m_PrismDummyFire & 1) m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
+				Input.m_Fire = m_PrismDummyFire;
+			}
+			m_PrismDummyFireOwned = false;
+		}
+		else m_PrismDummyFire = Input.m_Fire;
+		m_PrismLastAssisted = Assisted;
+		mem_copy(pData, &Input, sizeof(Input));
+		return sizeof(Input);
+	}
 	if(!g_Config.m_ClDummyHammer)
 	{
 		if(m_DummyFire != 0)
@@ -923,6 +1024,10 @@ void CGameClient::OnRender()
 
 void CGameClient::OnDummyDisconnect()
 {
+	m_PrismMacros.Cancel();
+	m_PrismLastAssisted = false;
+	m_PrismDummyFireOwned = false;
+	m_PrismHammerCounter = 0;
 	m_aLocalIds[1] = -1;
 	m_aDDRaceMsgSent[1] = false;
 	m_aShowOthers[1] = SHOW_OTHERS_NOT_SET;

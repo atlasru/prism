@@ -44,6 +44,7 @@ struct SScoreInfo
 
 class CHud : public CComponent
 {
+	void RenderPrismModules();
 	float m_Width, m_Height;
 
 	int m_HudQuadContainerIndex;

@@ -144,6 +144,7 @@ protected:
 	bool m_PrismOpen = false;
 	float m_PrismTransition = 0.0f;
 	int m_PrismCategory = 0;
+	int m_PrismCaptureBind = -1; // -1 none; 0 assistant, 1 emergency stop, 2..5 macros.
 
 	bool m_DummyNamePlatePreview = false;
 

@@ -4,6 +4,7 @@
 #define GAME_CLIENT_GAMECLIENT_H
 
 #include "render.h"
+#include "prism_qol.h"
 
 #include <base/color.h>
 #include <base/types.h>
@@ -170,6 +171,14 @@ public:
 	CImportantAlert m_ImportantAlert;
 	CDebugHud m_DebugHud;
 	CControls m_Controls;
+	// Phase 3: only client-side input composition, never prediction/physics/protocol.
+	PrismQol::CMacroEngine m_PrismMacros;
+	bool m_PrismMacroFireOwned = false;
+	bool m_PrismDummyFireOwned = false;
+	bool m_PrismLastAssisted = false;
+	int m_PrismDummyFire = 0;
+	int m_PrismHammerCounter = 0;
+	void PrismEmergencyStop();
 	CEffects m_Effects;
 	CScoreboard m_Scoreboard;
 	CStatboard m_Statboard;
