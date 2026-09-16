@@ -30,9 +30,17 @@ jobs:
       - name: Package
         if: matrix.configuration == 'Release'
         run: cmake --build build --config Release --target package_default
+      - name: Verify distribution
+        id: package
+        if: matrix.configuration == 'Release'
+        run: python scripts/package_prism.py build
+      - name: Packaged client smoke
+        if: matrix.configuration == 'Release'
+        run: python scripts/smoke_prism.py build/verified-package/Prism
       - uses: actions/upload-artifact@v4
         if: matrix.configuration == 'Release'
         with:
-          name: prism-foundation-windows-x64
-          path: build/*-win64.zip
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: dist/*
           if-no-files-found: error
+
