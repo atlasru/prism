@@ -23,15 +23,16 @@ jobs:
         run: |
           python scripts/phase3_integrate.py
           python scripts/phase3_menu.py
+          python scripts/phase3_fix_input.py
           git diff --check
       - name: Preserve integration in a commit
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add src/engine/shared/config_variables.h src/game/client/gameclient.h src/game/client/gameclient.cpp src/game/client/components/controls.cpp src/game/client/components/menus.h src/game/client/components/menus.cpp src/game/client/components/menus_settings_prism.cpp src/game/client/components/hud.cpp src/game/client/components/hud.h src/test/prism_test.cpp
+          git add src/engine/shared/config_variables.h src/game/client/gameclient.h src/game/client/gameclient.cpp src/game/client/components/controls.cpp src/game/client/components/controls.h src/game/client/components/menus.h src/game/client/components/menus.cpp src/game/client/components/menus_settings_prism.cpp src/game/client/components/hud.cpp src/game/client/components/hud.h src/test/prism_test.cpp
           if ! git diff --cached --quiet; then
-            git commit -m 'feat(prism): integrate Phase 3 QoL, macro editor, and modular HUD'
+            git commit -m 'fix(prism): compile menu and isolate macro-owned input from manual controls'
             git push origin HEAD:feature/prism-phase3-qol-identity
           fi
   build:
