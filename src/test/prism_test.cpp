@@ -1,5 +1,6 @@
 // Prism additions, distributed under the zlib license in license.txt.
 #include <game/client/prism.h>
+#include <game/client/prism_qol.h>
 #include <engine/shared/console.h>
 #include <gtest/gtest.h>
 #include <climits>
@@ -161,4 +162,90 @@ TEST_F(PrismConfig, OverlayPreferencesSurviveConsoleSerialization)
  EXPECT_EQ(m_Config.m_PrismPanelOpacity, 76);
  EXPECT_EQ(m_Config.m_PrismReducedMotion, 1);
  EXPECT_EQ(m_Config.m_PrismPreset, Prism::CUSTOM);
+}
+
+
+TEST(PrismMacro, ParseRejectsUnboundedOrMalformedActions)
+{
+    PrismQol::SSequence Sequence;
+    EXPECT_FALSE(PrismQol::Parse("11:0", Sequence));
+    EXPECT_FALSE(PrismQol::Parse("1:5001", Sequence));
+    EXPECT_FALSE(PrismQol::Parse("1:2;", Sequence));
+    EXPECT_FALSE(PrismQol::Parse("fire", Sequence));
+    EXPECT_FALSE(PrismQol::Parse("1:1;1:1;1:1;1:1;1:1;1:1;1:1;1:1;1:1", Sequence));
+    EXPECT_TRUE(PrismQol::Parse("1:1;2:5;9:0", Sequence));
+    EXPECT_EQ(Sequence.m_Count, 3);
+}
+TEST(PrismMacro, SerializationRoundTrip)
+{
+    PrismQol::SSequence Sequence;
+    ASSERT_TRUE(PrismQol::Parse("1:25;2:45;9:0", Sequence));
+    char aText[512];
+    ASSERT_TRUE(PrismQol::Encode(Sequence, aText, sizeof(aText)));
+    EXPECT_STREQ(aText, "1:25;2:45;9:0");
+    EXPECT_FALSE(PrismQol::Encode(Sequence, aText, 3));
+}
+TEST(PrismMacro, OnceRunsNonBlockingAndReleasesOwnedInputs)
+{
+    PrismQol::CMacroEngine Engine;
+    Engine.Configure(0, "1:30;2:10", 44, PrismQol::ONCE, true);
+    Engine.KeyEvent(44, true, false, 100);
+    Engine.Tick(100, true);
+    EXPECT_EQ(Engine.Owned(), PrismQol::OWN_LEFT);
+    Engine.Tick(129, true);
+    EXPECT_EQ(Engine.Owned(), PrismQol::OWN_LEFT);
+    Engine.Tick(130, true);
+    EXPECT_EQ(Engine.Owned(), 0);
+    Engine.Tick(141, true);
+    EXPECT_EQ(Engine.ActiveCount(), 0);
+}
+TEST(PrismMacro, HoldStopsAndCleansUpOnRelease)
+{
+    PrismQol::CMacroEngine Engine;
+    Engine.Configure(1, "5:40;0:40", 45, PrismQol::HOLD, true);
+    Engine.KeyEvent(45, true, false, 0);
+    Engine.Tick(0, true);
+    EXPECT_EQ(Engine.Owned(), PrismQol::OWN_JUMP);
+    Engine.KeyEvent(45, false, false, 1);
+    EXPECT_EQ(Engine.Owned(), 0);
+    EXPECT_EQ(Engine.ActiveCount(), 0);
+}
+TEST(PrismMacro, ToggleStopsOnSecondPress)
+{
+    PrismQol::CMacroEngine Engine;
+    Engine.Configure(0, "7:100", 46, PrismQol::TOGGLE, true);
+    Engine.KeyEvent(46, true, false, 0);
+    Engine.Tick(0, true);
+    Engine.KeyEvent(46, false, false, 1);
+    Engine.KeyEvent(46, true, false, 2);
+    EXPECT_EQ(Engine.ActiveCount(), 0);
+    EXPECT_EQ(Engine.Owned(), 0);
+}
+TEST(PrismMacro, FocusLossAndConfigChangeCancelOwnedInput)
+{
+    PrismQol::CMacroEngine Engine;
+    Engine.Configure(0, "3:100", 47, PrismQol::TOGGLE, true);
+    Engine.KeyEvent(47, true, false, 0);
+    Engine.Tick(0, true);
+    EXPECT_EQ(Engine.Owned(), PrismQol::OWN_RIGHT);
+    Engine.Tick(10, false);
+    EXPECT_EQ(Engine.Owned(), 0);
+    Engine.Configure(0, "3:100", 47, PrismQol::TOGGLE, false);
+    EXPECT_EQ(Engine.ActiveCount(), 0);
+}
+TEST(PrismMacro, FireIsSinglePulse)
+{
+    PrismQol::CMacroEngine Engine;
+    Engine.Configure(0, "9:50", 48, PrismQol::ONCE, true);
+    Engine.KeyEvent(48, true, false, 0);
+    Engine.Tick(0, true);
+    EXPECT_TRUE(Engine.TakeFirePulse());
+    EXPECT_FALSE(Engine.TakeFirePulse());
+}
+TEST(PrismHud, NormalizedPositionsRemainWithinBounds)
+{
+    EXPECT_FLOAT_EQ(PrismQol::HudCoordinate(10000, 300, 40), 260);
+    EXPECT_FLOAT_EQ(PrismQol::HudCoordinate(-500, 300, 40), 0);
+    EXPECT_EQ(PrismQol::HudNormalize(150, 300), 5000);
+    EXPECT_EQ(PrismQol::HudNormalize(0, 0), 0);
 }

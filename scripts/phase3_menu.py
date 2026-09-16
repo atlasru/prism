@@ -1,155 +1,52 @@
-// Prism additions, distributed under the zlib license in license.txt.
-#include "menus.h"
-#include <game/client/gameclient.h>
+#!/usr/bin/env python3
+"""Upgrade the existing Insert overlay without replacing its render architecture."""
+from pathlib import Path
 
-#include <algorithm>
 
-#include <engine/shared/config.h>
-#include <game/client/prism.h>
-#include <game/client/prism_qol.h>
-#include <game/client/ui_scrollregion.h>
+def edit(path, old, new, marker):
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    if marker in text:
+        return
+    if text.count(old) != 1:
+        raise RuntimeError(f"{path}: expected exactly one anchor, found {text.count(old)}: {old[:110]!r}")
+    p.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print(f"patched {path}: {marker}")
 
-void CMenus::RenderSettingsPrism(CUIRect Screen)
+
+MENU = "src/game/client/components/menus_settings_prism.cpp"
+edit(MENU, '#include <game/client/prism.h>\n', '#include <game/client/prism.h>\n#include <game/client/prism_qol.h>\n', '#include <game/client/prism_qol.h>')
+edit(MENU, 'PRISM   /   VISUAL STUDIO', 'PRISM   /   CONTROL CENTER', 'PRISM   /   CONTROL CENTER')
+edit(MENU, 'static const char *s_apTabs[] = {"General", "Presets", "Tee", "Hook", "Interface", "Performance"};\n\tstatic CButtonContainer s_aTabs[6];\n\tstatic float s_aTabBlend[6] = {};\n\tfor(int i = 0; i < 6; ++i)', 'static const char *s_apTabs[] = {"Dashboard", "Visuals", "Double Tee", "Macros", "HUD", "Performance", "Settings"};\n\tstatic CButtonContainer s_aTabs[7];\n\tstatic float s_aTabBlend[7] = {};\n\tfor(int i = 0; i < 7; ++i)', 'static CButtonContainer s_aTabs[7]')
+edit(MENU, 'static CScrollRegion s_aScroll[6];', 'static CScrollRegion s_aScroll[7];', 'static CScrollRegion s_aScroll[7];')
+edit("src/game/client/components/menus.cpp", '(m_PrismCategory + 1) % 6;', '(m_PrismCategory + 1) % 7;', '(m_PrismCategory + 1) % 7;')
+edit("src/game/client/components/menus.h", '\tint m_PrismCategory = 0;\n', '\tint m_PrismCategory = 0;\n\tint m_PrismCaptureBind = -1; // -1 none; 0 assistant, 1 emergency stop, 2..5 macros.\n', 'int m_PrismCaptureBind = -1;')
+edit("src/game/client/components/menus.cpp", 'bool CMenus::OnInput(const IInput::CEvent &Event)\n{', '''bool CMenus::OnInput(const IInput::CEvent &Event)
 {
-	Prism::Validate(g_Config);
-	const float Motion = g_Config.m_PrismReducedMotion ? 1.0f : std::clamp(Client()->RenderFrameTime() * 15.0f, 0.0f, 1.0f);
-	m_PrismTransition += ((m_PrismOpen ? 1.0f : 0.0f) - m_PrismTransition) * Motion;
-	if(!m_PrismOpen && m_PrismTransition < 0.01f)
-	{
-		m_PrismTransition = 0.0f;
-		return;
-	}
+\tif(m_PrismOpen && m_PrismCaptureBind >= 0 && (Event.m_Flags & IInput::FLAG_PRESS) && !(Event.m_Flags & IInput::FLAG_REPEAT))
+\t{
+\t\tint *apBind[] = {&g_Config.m_PrismDoubleBind, &g_Config.m_PrismStopBind,
+\t\t\t&g_Config.m_PrismMacro1Bind, &g_Config.m_PrismMacro2Bind,
+\t\t\t&g_Config.m_PrismMacro3Bind, &g_Config.m_PrismMacro4Bind};
+\t\tif(m_PrismCaptureBind < 6)
+\t\t{
+\t\t\tif(Event.m_Key == KEY_ESCAPE || Event.m_Key == KEY_BACKSPACE)
+\t\t\t\t*apBind[m_PrismCaptureBind] = 0;
+\t\t\telse if(Event.m_Key != KEY_INSERT && Event.m_Key != KEY_F12)
+\t\t\t\t*apBind[m_PrismCaptureBind] = Event.m_Key;
+\t\t}
+\t\tm_PrismCaptureBind = -1;
+\t\treturn true;
+\t}
+''', 'if(m_PrismOpen && m_PrismCaptureBind >= 0')
+edit("src/game/client/components/menus.cpp", 'm_PrismOpen = !m_PrismOpen;\n', 'm_PrismOpen = !m_PrismOpen;\n\t\tm_PrismCaptureBind = -1;\n', 'm_PrismCaptureBind = -1;\n\t\tif(!m_PrismOpen)')
 
-	const float Fade = m_PrismTransition * m_PrismTransition * (3.0f - 2.0f * m_PrismTransition);
-	const float Opacity = g_Config.m_PrismPanelOpacity / 100.0f;
-	const float Scale = g_Config.m_PrismMenuScale / 100.0f;
-	Screen.Draw(ColorRGBA(0.012f, 0.018f, 0.030f, 0.66f * Fade), IGraphics::CORNER_NONE, 0.0f);
-
-	CUIRect Panel = Screen;
-	Panel.w = std::min(Screen.w - 24.0f, 760.0f * Scale);
-	Panel.h = std::min(Screen.h - 24.0f, 510.0f * Scale);
-	Panel.x = Screen.x + (Screen.w - Panel.w) * 0.5f;
-	Panel.y = Screen.y + (Screen.h - Panel.h) * 0.5f + (1.0f - Fade) * 13.0f;
-	CUIRect Shadow = Panel;
-	Shadow.x -= 8.0f;
-	Shadow.y -= 3.0f;
-	Shadow.w += 16.0f;
-	Shadow.h += 17.0f;
-	Shadow.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.26f * Fade), IGraphics::CORNER_ALL, 23.0f);
-	CUIRect Edge = Panel;
-	Edge.Margin(-1.0f, &Edge);
-	Edge.Draw(ColorRGBA(0.61f, 0.72f, 0.83f, 0.18f * Fade), IGraphics::CORNER_ALL, 20.0f);
-	Panel.Draw(ColorRGBA(0.063f, 0.081f, 0.105f, Opacity * Fade), IGraphics::CORNER_ALL, 19.0f);
-	CUIRect Sheen;
-	Panel.HSplitTop(52.0f, &Sheen, nullptr);
-	Sheen.Draw(ColorRGBA(0.65f, 0.76f, 0.86f, 0.065f * Fade), IGraphics::CORNER_T, 19.0f);
-
-	// Closing is purely visual: release interactive items immediately.
-	if(!m_PrismOpen)
-		return;
-
-	CUIRect Inner = Panel;
-	Inner.Margin(17.0f, &Inner);
-	CUIRect Header, Body, Footer;
-	Inner.HSplitTop(47.0f, &Header, &Inner);
-	Inner.HSplitBottom(25.0f, &Body, &Footer);
-	CUIRect Title, Close;
-	Header.VSplitRight(67.0f, &Title, &Close);
-	Ui()->DoLabel(&Title, "PRISM   /   CONTROL CENTER", 18.0f, TEXTALIGN_ML);
-	static CButtonContainer s_Close;
-	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.52f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
-	{
-		Ui()->ClosePopupMenus();
-		m_PrismOpen = false;
-	}
-
-	CUIRect Sidebar, Content;
-	Body.VSplitLeft(std::min(153.0f * Scale, Body.w * 0.29f), &Sidebar, &Content);
-	Sidebar.VSplitRight(12.0f, &Sidebar, nullptr);
-	Sidebar.Draw(ColorRGBA(0.026f, 0.041f, 0.060f, 0.52f * Fade), IGraphics::CORNER_ALL, 12.0f);
-	Sidebar.Margin(8.0f, &Sidebar);
-	Content.Draw(ColorRGBA(0.034f, 0.049f, 0.068f, 0.45f * Fade), IGraphics::CORNER_ALL, 12.0f);
-	Content.Margin(12.0f, &Content);
-
-	static const char *s_apTabs[] = {"Dashboard", "Visuals", "Double Tee", "Macros", "HUD", "Performance", "Settings"};
-	static CButtonContainer s_aTabs[7];
-	static float s_aTabBlend[7] = {};
-	for(int i = 0; i < 7; ++i)
-	{
-		CUIRect Tab;
-		Sidebar.HSplitTop(40.0f, &Tab, &Sidebar);
-		Sidebar.HSplitTop(5.0f, nullptr, &Sidebar);
-		const float Target = m_PrismCategory == i ? 1.0f : 0.0f;
-		s_aTabBlend[i] += (Target - s_aTabBlend[i]) * Motion;
-		const float Highlight = s_aTabBlend[i];
-		const ColorRGBA ButtonColor(0.26f + Highlight * 0.16f, 0.32f + Highlight * 0.18f, 0.40f + Highlight * 0.20f, 0.10f + Highlight * 0.32f);
-		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.42f, ButtonColor))
-		{
-			m_PrismCategory = i;
-			Ui()->SetActiveItem(nullptr);
-		}
-	}
-
-	static CScrollRegion s_aScroll[7];
-	CUIRect ScrollView = Content;
-	CScrollRegion &Scroll = s_aScroll[m_PrismCategory];
-	Scroll.Begin(&ScrollView);
-	auto NextRow = [&](float Height = 34.0f) {
-		CUIRect Row;
-		ScrollView.HSplitTop(Height, &Row, &ScrollView);
-		Scroll.AddRect(Row);
-		ScrollView.HSplitTop(4.0f, nullptr, &ScrollView);
-		return Row;
-	};
-	auto Label = [&](const char *pLabel) {
-		CUIRect Row = NextRow(30.0f);
-		if(!Scroll.RectClipped(Row))
-			Ui()->DoLabel(&Row, pLabel, 15.0f, TEXTALIGN_ML);
-	};
-	static float s_aToggleProgress[24] = {};
-	int ToggleIndex = 0;
-	auto Toggle = [&](const char *pLabel, int *pValue) {
-		CUIRect Row = NextRow(35.0f);
-		const int Index = ToggleIndex++;
-		if(Scroll.RectClipped(Row))
-			return;
-		Row.Draw(ColorRGBA(0.45f, 0.55f, 0.65f, 0.095f), IGraphics::CORNER_ALL, 8.0f);
-		CUIRect LabelRect, Switch;
-		Row.VSplitRight(52.0f, &LabelRect, &Switch);
-		LabelRect.VMargin(9.0f, &LabelRect);
-		Ui()->DoLabel(&LabelRect, pLabel, 13.0f, TEXTALIGN_ML);
-		Switch.VMargin(7.0f, &Switch);
-		Switch.HMargin(8.0f, &Switch);
-		const float Target = *pValue ? 1.0f : 0.0f;
-		s_aToggleProgress[Index] += (Target - s_aToggleProgress[Index]) * Motion;
-		const float Position = s_aToggleProgress[Index];
-		Switch.Draw(ColorRGBA(0.22f + 0.17f * Position, 0.26f + 0.27f * Position, 0.33f + 0.32f * Position, 0.9f), IGraphics::CORNER_ALL, 8.0f);
-		CUIRect Knob = Switch;
-		Knob.w = 14.0f;
-		Knob.h = 14.0f;
-		Knob.x += 2.0f + Position * (Switch.w - Knob.w - 4.0f);
-		Knob.y = Switch.y + (Switch.h - Knob.h) * 0.5f;
-		Knob.Draw(ColorRGBA(0.94f, 0.96f, 0.98f, 1.0f), IGraphics::CORNER_ALL, 7.0f);
-		if(Ui()->DoButtonLogic(pValue, *pValue, &Row, BUTTONFLAG_LEFT))
-			*pValue ^= 1;
-	};
-	auto Slider = [&](const char *pLabel, int *pValue, int Min, int Max) {
-		CUIRect Row = NextRow(37.0f);
-		if(!Scroll.RectClipped(Row))
-		{
-			Row.Draw(ColorRGBA(0.45f, 0.55f, 0.65f, 0.065f), IGraphics::CORNER_ALL, 8.0f);
-			Row.Margin(5.0f, &Row);
-			Ui()->DoScrollbarOption(pValue, pValue, &Row, pLabel, Min, Max);
-		}
-	};
-	static CButtonContainer s_aColors[6];
-	auto Color = [&](const char *pLabel, unsigned *pValue, int Index) {
-		CUIRect Row = NextRow(31.0f);
-		if(!Scroll.RectClipped(Row))
-			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false);
-	};
-
-
+p = Path(MENU)
+s = p.read_text(encoding="utf-8")
+if '// Phase 3 navigation and editors' not in s:
+    start = s.index('\tswitch(m_PrismCategory)\n\t{')
+    end = s.index('\tScroll.End();', start)
+    replacement = r'''
     // Phase 3 navigation and editors. All controls edit saved DDNet configuration.
     // Existing visual presets affect visuals only; all QoL preferences are separate.
     static CButtonContainer s_aActionButtons[32];
@@ -410,8 +307,8 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         if(Button("Reset visual presets only", 15)) Prism::Reset(g_Config);
         break;
     }
-	Scroll.End();
-	Footer.Draw(ColorRGBA(0.65f, 0.75f, 0.85f, 0.065f), IGraphics::CORNER_ALL, 8.0f);
-	Ui()->DoLabel(&Footer, "PRISM 0.1  /  Insert or Esc to close", 11.0f, TEXTALIGN_MC);
-	Prism::Validate(g_Config);
-}
+'''
+    s = s[:start] + replacement + s[end:]
+    p.write_text(s, encoding="utf-8")
+    print("upgraded Prism overlay to Phase 3")
+print("Phase 3 menu integration complete")

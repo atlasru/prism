@@ -1,16 +1,43 @@
 name: Prism Windows
 on:
   push:
-    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, main]
+    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, feature/prism-phase3-qol-identity, main]
   pull_request:
-    branches: [feature/prism-v0.1.0-windows, main]
+    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, main]
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: prism-windows-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  integrate-phase3:
+    if: github.ref == 'refs/heads/feature/prism-phase3-qol-identity' || github.head_ref == 'feature/prism-phase3-qol-identity'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/prism-phase3-qol-identity
+          submodules: false
+          persist-credentials: true
+      - name: Apply isolated Phase 3 changes
+        run: |
+          python scripts/phase3_integrate.py
+          python scripts/phase3_menu.py
+          python scripts/phase3_fix_input.py
+          git diff --check
+      - name: Preserve integration in a commit
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/engine/shared/config_variables.h src/game/client/gameclient.h src/game/client/gameclient.cpp src/game/client/components/controls.cpp src/game/client/components/controls.h src/game/client/components/menus.h src/game/client/components/menus.cpp src/game/client/components/menus_settings_prism.cpp src/game/client/components/hud.cpp src/game/client/components/hud.h src/test/prism_test.cpp
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix(prism): compile menu and isolate macro-owned input from manual controls'
+            git push origin HEAD:feature/prism-phase3-qol-identity
+          fi
   build:
+    needs: integrate-phase3
+    if: always() && (needs.integrate-phase3.result == 'success' || needs.integrate-phase3.result == 'skipped')
     runs-on: windows-2022
     strategy:
       fail-fast: false
@@ -19,8 +46,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ (github.ref == 'refs/heads/feature/prism-phase3-qol-identity' || github.head_ref == 'feature/prism-phase3-qol-identity') && 'feature/prism-phase3-qol-identity' || github.sha }}
           submodules: recursive
           persist-credentials: false
+      - name: Identify tested revision
+        run: git rev-parse HEAD
       - name: Configure
         run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_${{ matrix.configuration == 'Release' && 'RELEASE' || 'DEBUG' }}=. -DDOWNLOAD_GTEST=ON -DCLIENT=ON -DSERVER=ON -DTOOLS=OFF -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF
       - name: Build client and tests

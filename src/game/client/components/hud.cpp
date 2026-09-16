@@ -2,6 +2,7 @@
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "hud.h"
+#include <game/client/prism_qol.h>
 
 #include "binds.h"
 #include "camera.h"
@@ -1750,6 +1751,7 @@ void CHud::OnRender()
 		if(g_Config.m_ClShowRecord)
 			RenderRecord();
 	}
+	RenderPrismModules();
 	RenderCursor();
 }
 
@@ -1937,3 +1939,76 @@ void CHud::RenderRecord()
 	}
 }
 
+
+// Dedicated Prism HUD: fixed stack buffers, normalized coordinates and no lists
+// of "staff" inferred from names, clan tags, skins or chat messages.
+void CHud::RenderPrismModules()
+{
+    if(!g_Config.m_PrismHudEnabled || Client()->State() != IClient::STATE_ONLINE)
+        return;
+    const int Scale = std::clamp(g_Config.m_PrismHudScale, 65, 150);
+    const float Opacity = std::clamp(g_Config.m_PrismHudOpacity, 20, 100) / 100.0f;
+    struct SModule
+    {
+        int *m_pEnabled;
+        int *m_pX;
+        int *m_pY;
+    };
+    SModule aModules[] = {
+        {&g_Config.m_PrismHudHotkeys, &g_Config.m_PrismHudHotkeysX, &g_Config.m_PrismHudHotkeysY},
+        {&g_Config.m_PrismHudIdentity, &g_Config.m_PrismHudIdentityX, &g_Config.m_PrismHudIdentityY},
+        {&g_Config.m_PrismHudPerformance, &g_Config.m_PrismHudPerformanceX, &g_Config.m_PrismHudPerformanceY},
+        {&g_Config.m_PrismHudDummy, &g_Config.m_PrismHudDummyX, &g_Config.m_PrismHudDummyY},
+        {&g_Config.m_PrismHudStaff, &g_Config.m_PrismHudStaffX, &g_Config.m_PrismHudStaffY},
+    };
+    for(int i = 0; i < 5; ++i)
+    {
+        if(!*aModules[i].m_pEnabled)
+            continue;
+        char aText[192] = {};
+        switch(i)
+        {
+        case 0:
+            str_format(aText, sizeof(aText), "Hotkeys  %s | macros %d", g_Config.m_PrismDoubleEnabled ? "Double Tee ON" : "Double Tee OFF", GameClient()->m_PrismMacros.ActiveCount());
+            break;
+        case 1:
+            str_copy(aText, "PRISM  /  0.1.0  Phase 3");
+            break;
+        case 2:
+            str_format(aText, sizeof(aText), "Performance  %.0f FPS  %.2f ms", 1.0f / std::max(0.00001f, Client()->FrameTimeAverage()), Client()->FrameTimeAverage() * 1000.0f);
+            break;
+        case 3:
+            str_format(aText, sizeof(aText), "Dummy  %s | %s", Client()->DummyConnected() ? "connected" : "offline", g_Config.m_PrismDoubleEnabled ? "assistant ON" : "assistant OFF");
+            break;
+        case 4:
+        {
+            int Verified = 0;
+            const char *pVerifiedName = nullptr;
+            for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+            {
+                // Auth level comes exclusively from server-supplied client state.
+                // No guesses based on nicknames or third-party staff lists.
+                if(GameClient()->m_aClients[Id].m_Active && GameClient()->m_aClients[Id].m_AuthLevel > 0 && GameClient()->m_Snap.m_apPlayerInfos[Id])
+                {
+                    ++Verified;
+                    if(!pVerifiedName) pVerifiedName = GameClient()->m_aClients[Id].m_aName;
+                }
+            }
+            if(Verified)
+                str_format(aText, sizeof(aText), "Verified server staff: %d | %s", Verified, pVerifiedName);
+            else
+                str_copy(aText, "Staff: no server-verified status available");
+            break;
+        }
+        }
+        const float Width = 185.0f * Scale / 100.0f;
+        const float Height = 18.0f * Scale / 100.0f;
+        const float X = PrismQol::HudCoordinate(*aModules[i].m_pX, m_Width, Width);
+        const float Y = PrismQol::HudCoordinate(*aModules[i].m_pY, m_Height, Height);
+        Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.065f, 0.08f, 0.11f, 0.73f * Opacity), IGraphics::CORNER_ALL, 4.0f);
+        Graphics()->DrawRect(X + 1.0f, Y + 1.0f, Width - 2.0f, 1.0f, ColorRGBA(0.8f, 0.86f, 0.95f, 0.10f * Opacity), IGraphics::CORNER_ALL, 1.0f);
+        TextRender()->TextColor(0.91f, 0.94f, 0.98f, Opacity);
+        TextRender()->Text(X + 5.0f, Y + 5.0f * Scale / 100.0f, 7.0f * Scale / 100.0f, aText, Width - 9.0f);
+    }
+    TextRender()->TextColor(TextRender()->DefaultTextColor());
+}
