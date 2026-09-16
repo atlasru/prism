@@ -25,6 +25,8 @@ void CMenus::SetNeedSendInfo()
 
 void CMenus::RenderSettings(CUIRect MainView)
 {
+	if(g_Config.m_UiSettingsPage < 0 || g_Config.m_UiSettingsPage >= SETTINGS_LENGTH)
+		g_Config.m_UiSettingsPage = SETTINGS_GENERAL;
 	// render background
 	CUIRect Button, TabBar, RestartBar;
 	MainView.VSplitRight(120.0f, &MainView, &TabBar);
@@ -52,8 +54,7 @@ void CMenus::RenderSettings(CUIRect MainView)
 		Localize("Sound"),
 		Localize("DDNet"),
 		Localize("Assets"),
-		Localize("Credits"),
-		"Prism"};
+		Localize("Credits")};
 	static CButtonContainer s_aTabButtons[SETTINGS_LENGTH];
 
 	const float TabHeight = std::min(26.0f, (TabBar.h - 4.0f * SETTINGS_LENGTH) / SETTINGS_LENGTH);
@@ -122,10 +123,6 @@ void CMenus::RenderSettings(CUIRect MainView)
 	{
 		GameClient()->m_MenuBackground.ChangePosition(CMenuBackground::POS_SETTINGS_CREDITS);
 		RenderSettingsCredits(MainView);
-	}
-	else if(g_Config.m_UiSettingsPage == SETTINGS_PRISM)
-	{
-		RenderSettingsPrism(MainView);
 	}
 	else
 	{

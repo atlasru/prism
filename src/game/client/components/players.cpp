@@ -551,10 +551,13 @@ void CPlayers::RenderHook(
    Graphics()->TextureClear();
    Graphics()->QuadsBegin();
    Graphics()->QuadsSetRotation(0);
-   Graphics()->SetColor(Accent.WithAlpha(Alpha * Intensity * 0.13f));
-   for(int i = 3; i >= 1; --i)
+   // Broad, faint outside; narrow, soft inside. Identical hook endpoints.
+   constexpr float aRadius[] = {11.0f, 8.0f, 5.0f, 2.5f};
+   constexpr float aAlpha[] = {0.025f, 0.045f, 0.075f, 0.12f};
+   for(int i = 0; i < 4; ++i)
    {
-    const vec2 Offset = Normal * (2.0f + i * 2.0f);
+    const vec2 Offset = Normal * aRadius[i];
+    Graphics()->SetColor(Accent.WithAlpha(Alpha * Intensity * aAlpha[i]));
     IGraphics::CFreeformItem Item(HookPos - Offset, HookPos + Offset, Pos - Offset, Pos + Offset);
     Graphics()->QuadsDrawFreeform(&Item, 1);
    }

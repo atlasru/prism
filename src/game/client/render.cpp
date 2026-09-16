@@ -637,10 +637,20 @@ void CRenderTools::RenderPrismTee(const CAnimState *pAnim, const CTeeRenderInfo 
   Part(pAnim->GetBody(), true);
   Part(pAnim->GetFrontFoot(), false);
  };
- // Three bounded alpha layers approximate a halo with no framebuffer or shader dependency.
+ // Four low-opacity feather layers approximate a halo without framebuffer blur.
+ // The outermost layer is faint; the inner falloff is deliberately restrained.
  if(Glow && Intensity > 0.0f)
-  for(int i = 3; i >= 1; --i) Layer(GlowColor.WithAlpha(Intensity * 0.13f), (2.0f + i * 3.0f) * AnimScale);
- if(Outline) Layer(OutlineColor, Width * AnimScale);
+ {
+  constexpr float aRadius[] = {13.0f, 9.5f, 6.0f, 3.0f};
+  constexpr float aAlpha[] = {0.028f, 0.048f, 0.072f, 0.11f};
+  for(int i = 0; i < 4; ++i)
+   Layer(GlowColor.WithAlpha(Intensity * aAlpha[i]), aRadius[i] * AnimScale);
+ }
+ if(Outline)
+ {
+  Layer(OutlineColor.WithAlpha(0.12f), (Width + 2.5f) * AnimScale);
+  Layer(OutlineColor.WithAlpha(0.75f), Width * AnimScale);
+ }
  Graphics()->QuadsSetRotation(0);
  Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
 }
