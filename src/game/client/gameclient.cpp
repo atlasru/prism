@@ -473,7 +473,7 @@ void CGameClient::OnUpdate()
 	HandleLanguageChanged();
 	const bool CanRunPrism = Client()->State() == IClient::STATE_ONLINE &&
 		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() &&
-		!m_Menus.IsActive() && !m_Chat.IsActive() && !DemoPlayer()->IsPlaying();
+		!m_Menus.IsActive() && !m_Chat.IsActive() && !m_GameConsole.IsActive() && !DemoPlayer()->IsPlaying();
 	const int64_t PrismTimeMs = time_get() * 1000 / time_freq();
 	m_PrismMacros.Configure(0, g_Config.m_PrismMacro1, g_Config.m_PrismMacro1Bind, g_Config.m_PrismMacro1Mode, g_Config.m_PrismMacro1Enabled != 0);
 	m_PrismMacros.Configure(1, g_Config.m_PrismMacro2, g_Config.m_PrismMacro2Bind, g_Config.m_PrismMacro2Mode, g_Config.m_PrismMacro2Enabled != 0);
@@ -544,7 +544,7 @@ void CGameClient::OnInput(const IInput::CEvent &Event)
 		PrismEmergencyStop();
 		return;
 	}
-	if(Pressed && !m_Menus.IsActive() && !m_Chat.IsActive() && Client()->State() == IClient::STATE_ONLINE &&
+	if(Pressed && !m_Menus.IsActive() && !m_Chat.IsActive() && !m_GameConsole.IsActive() && Client()->State() == IClient::STATE_ONLINE &&
 		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive())
 	{
 		if(!(Event.m_Flags & IInput::FLAG_REPEAT) && g_Config.m_PrismDoubleBind && Event.m_Key == g_Config.m_PrismDoubleBind)
@@ -600,7 +600,7 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 	const bool PrismAllowed = Client()->State() == IClient::STATE_ONLINE && Client()->DummyConnected() &&
 		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() && !m_Menus.IsActive() &&
 		!m_Chat.IsActive() && !DemoPlayer()->IsPlaying();
-	const bool Assisted = PrismAllowed && g_Config.m_PrismDoubleEnabled;
+	const bool Assisted = PrismAllowed && g_Config.m_PrismDoubleEnabled && m_aLocalIds[0] >= 0 && m_aLocalIds[1] >= 0;
 	if(Assisted || m_PrismLastAssisted || m_PrismDummyFireOwned)
 	{
 		CNetObj_PlayerInput Input = m_DummyInput;
@@ -796,6 +796,14 @@ void CGameClient::OnReset()
 	m_DummyInput = {};
 	m_HammerInput = {};
 	m_DummyFire = 0;
+	m_PrismMacros.Cancel();
+	m_PrismMacroFireOwned = false;
+	m_PrismMacroFireCounter = 0;
+	m_PrismMacroLastManualFire = 0;
+	m_PrismLastAssisted = false;
+	m_PrismDummyFireOwned = false;
+	m_PrismDummyFire = 0;
+	m_PrismHammerCounter = 0;
 	m_ReceivedDDNetPlayer = false;
 	m_ReceivedDDNetPlayerFinishTimes = false;
 	m_ReceivedDDNetPlayerFinishTimesMillis = false;

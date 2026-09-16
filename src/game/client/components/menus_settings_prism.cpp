@@ -1,5 +1,6 @@
 // Prism additions, distributed under the zlib license in license.txt.
 #include "menus.h"
+#include <game/client/gameclient.h>
 
 #include <algorithm>
 

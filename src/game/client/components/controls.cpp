@@ -50,6 +50,7 @@ void CControls::ResetInput(int Dummy)
 	m_aLastData[Dummy].m_Fire &= INPUT_STATE_MASK;
 	m_aLastData[Dummy].m_Jump = 0;
 	m_aInputData[Dummy] = m_aLastData[Dummy];
+	m_aPrismLastOutput[Dummy] = m_aInputData[Dummy];
 
 	m_aInputDirectionLeft[Dummy] = 0;
 	m_aInputDirectionRight[Dummy] = 0;
@@ -217,6 +218,7 @@ int CControls::SnapInput(int *pData)
 	}
 
 	bool Send = m_aLastData[g_Config.m_ClDummy].m_PlayerFlags != m_aInputData[g_Config.m_ClDummy].m_PlayerFlags;
+	CNetObj_PlayerInput PrismComposedInput = m_aInputData[g_Config.m_ClDummy];
 
 	m_aLastData[g_Config.m_ClDummy].m_PlayerFlags = m_aInputData[g_Config.m_ClDummy].m_PlayerFlags;
 
@@ -316,29 +318,43 @@ int CControls::SnapInput(int *pData)
 			m_aInputData[g_Config.m_ClDummy].m_TargetY = (int)(std::cos(t * 3) * 100.0f);
 		}
 
-		// Prism macros own only their added inputs; manual directions and buttons win.
+		// Compose a separate output snapshot; NEVER mutate m_aInputData or m_aLastData.
+		// Those buffers hold physical inputs and feed DDNet's original dummy copying.
+		PrismComposedInput = m_aInputData[g_Config.m_ClDummy];
 		const int Owned = GameClient()->m_PrismMacros.Owned();
-		if(m_aInputData[g_Config.m_ClDummy].m_Direction == 0)
+		if(PrismComposedInput.m_Direction == 0)
 		{
-			if((Owned & PrismQol::OWN_LEFT) && !(Owned & PrismQol::OWN_RIGHT)) m_aInputData[g_Config.m_ClDummy].m_Direction = -1;
-			if((Owned & PrismQol::OWN_RIGHT) && !(Owned & PrismQol::OWN_LEFT)) m_aInputData[g_Config.m_ClDummy].m_Direction = 1;
+			if((Owned & PrismQol::OWN_LEFT) && !(Owned & PrismQol::OWN_RIGHT)) PrismComposedInput.m_Direction = -1;
+			if((Owned & PrismQol::OWN_RIGHT) && !(Owned & PrismQol::OWN_LEFT)) PrismComposedInput.m_Direction = 1;
 		}
-		if(Owned & PrismQol::OWN_JUMP) m_aInputData[g_Config.m_ClDummy].m_Jump = 1;
-		if(Owned & PrismQol::OWN_HOOK) m_aInputData[g_Config.m_ClDummy].m_Hook = 1;
-		if(GameClient()->m_PrismMacros.TakeFirePulse())
+		if(Owned & PrismQol::OWN_JUMP) PrismComposedInput.m_Jump = 1;
+		if(Owned & PrismQol::OWN_HOOK) PrismComposedInput.m_Hook = 1;
+		// Fire counters must remain monotonic even after a synthetic press/release.
+		// Apply physical counter deltas, then one optional macro pulse.
+		const int ManualFire = m_aInputData[g_Config.m_ClDummy].m_Fire & INPUT_STATE_MASK;
+		const int ManualDelta = (ManualFire - GameClient()->m_PrismMacroLastManualFire) & INPUT_STATE_MASK;
+		GameClient()->m_PrismMacroFireCounter = (GameClient()->m_PrismMacroFireCounter + ManualDelta) & INPUT_STATE_MASK;
+		GameClient()->m_PrismMacroLastManualFire = ManualFire;
+		const bool Pulse = GameClient()->m_PrismMacros.TakeFirePulse();
+		if(ManualFire & 1)
 		{
-			if(!(m_aInputData[g_Config.m_ClDummy].m_Fire & 1))
-			{
-				m_aInputData[g_Config.m_ClDummy].m_Fire = (m_aInputData[g_Config.m_ClDummy].m_Fire + 1) & INPUT_STATE_MASK;
-				GameClient()->m_PrismMacroFireOwned = true;
-			}
-		}
-		else if(GameClient()->m_PrismMacroFireOwned)
-		{
-			if(m_aInputData[g_Config.m_ClDummy].m_Fire & 1)
-				m_aInputData[g_Config.m_ClDummy].m_Fire = (m_aInputData[g_Config.m_ClDummy].m_Fire + 1) & INPUT_STATE_MASK;
+			if(!(GameClient()->m_PrismMacroFireCounter & 1))
+				GameClient()->m_PrismMacroFireCounter = (GameClient()->m_PrismMacroFireCounter + 1) & INPUT_STATE_MASK;
 			GameClient()->m_PrismMacroFireOwned = false;
 		}
+		else if(Pulse && !GameClient()->m_PrismMacroFireOwned)
+		{
+			if(!(GameClient()->m_PrismMacroFireCounter & 1))
+				GameClient()->m_PrismMacroFireCounter = (GameClient()->m_PrismMacroFireCounter + 1) & INPUT_STATE_MASK;
+			GameClient()->m_PrismMacroFireOwned = true;
+		}
+		else
+		{
+			if(GameClient()->m_PrismMacroFireCounter & 1)
+				GameClient()->m_PrismMacroFireCounter = (GameClient()->m_PrismMacroFireCounter + 1) & INPUT_STATE_MASK;
+			GameClient()->m_PrismMacroFireOwned = false;
+		}
+		PrismComposedInput.m_Fire = GameClient()->m_PrismMacroFireCounter;
 		// check if we need to send input
 		Send = Send || m_aInputData[g_Config.m_ClDummy].m_Direction != m_aLastData[g_Config.m_ClDummy].m_Direction;
 		Send = Send || m_aInputData[g_Config.m_ClDummy].m_Jump != m_aLastData[g_Config.m_ClDummy].m_Jump;
@@ -351,15 +367,31 @@ int CControls::SnapInput(int *pData)
 		Send = Send || (GameClient()->m_Snap.m_pLocalCharacter && GameClient()->m_Snap.m_pLocalCharacter->m_Weapon == WEAPON_NINJA && (m_aInputData[g_Config.m_ClDummy].m_Direction || m_aInputData[g_Config.m_ClDummy].m_Jump || m_aInputData[g_Config.m_ClDummy].m_Hook));
 	}
 
-	// copy and return size
-	m_aLastData[g_Config.m_ClDummy] = m_aInputData[g_Config.m_ClDummy];
+	// Release exactly Prism-owned input when entering UI, losing focus or stopping.
+	if(!(m_aInputData[g_Config.m_ClDummy].m_PlayerFlags & PLAYERFLAG_PLAYING))
+	{
+		PrismComposedInput = m_aInputData[g_Config.m_ClDummy];
+		if(GameClient()->m_PrismMacroFireOwned && (GameClient()->m_PrismMacroFireCounter & 1))
+			GameClient()->m_PrismMacroFireCounter = (GameClient()->m_PrismMacroFireCounter + 1) & INPUT_STATE_MASK;
+		GameClient()->m_PrismMacroFireOwned = false;
+		GameClient()->m_PrismMacroLastManualFire = PrismComposedInput.m_Fire & INPUT_STATE_MASK;
+		PrismComposedInput.m_Fire = GameClient()->m_PrismMacroFireCounter;
+	}
+	const int Dummy = g_Config.m_ClDummy;
+	Send = Send || PrismComposedInput.m_Direction != m_aPrismLastOutput[Dummy].m_Direction;
+	Send = Send || PrismComposedInput.m_Jump != m_aPrismLastOutput[Dummy].m_Jump;
+	Send = Send || PrismComposedInput.m_Hook != m_aPrismLastOutput[Dummy].m_Hook;
+	Send = Send || PrismComposedInput.m_Fire != m_aPrismLastOutput[Dummy].m_Fire;
+	m_aPrismLastOutput[Dummy] = PrismComposedInput;
+	// Preserve the DDNet physical input state and its original dummy-copy deltas.
+	m_aLastData[Dummy] = m_aInputData[Dummy];
 
 	if(!Send)
 		return 0;
 
 	m_LastSendTime = time_get();
-	mem_copy(pData, &m_aInputData[g_Config.m_ClDummy], sizeof(m_aInputData[0]));
-	return sizeof(m_aInputData[0]);
+	mem_copy(pData, &PrismComposedInput, sizeof(PrismComposedInput));
+	return sizeof(PrismComposedInput);
 }
 
 void CControls::OnRender()

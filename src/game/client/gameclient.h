@@ -174,6 +174,8 @@ public:
 	// Phase 3: only client-side input composition, never prediction/physics/protocol.
 	PrismQol::CMacroEngine m_PrismMacros;
 	bool m_PrismMacroFireOwned = false;
+	int m_PrismMacroFireCounter = 0;
+	int m_PrismMacroLastManualFire = 0;
 	bool m_PrismDummyFireOwned = false;
 	bool m_PrismLastAssisted = false;
 	int m_PrismDummyFire = 0;
