@@ -355,6 +355,29 @@ int CControls::SnapInput(int *pData)
 			GameClient()->m_PrismMacroFireOwned = false;
 		}
 		PrismComposedInput.m_Fire = GameClient()->m_PrismMacroFireCounter;
+		// Prism macros own only their added inputs; manual directions and buttons win.
+		const int Owned = GameClient()->m_PrismMacros.Owned();
+		if(m_aInputData[g_Config.m_ClDummy].m_Direction == 0)
+		{
+			if((Owned & PrismQol::OWN_LEFT) && !(Owned & PrismQol::OWN_RIGHT)) m_aInputData[g_Config.m_ClDummy].m_Direction = -1;
+			if((Owned & PrismQol::OWN_RIGHT) && !(Owned & PrismQol::OWN_LEFT)) m_aInputData[g_Config.m_ClDummy].m_Direction = 1;
+		}
+		if(Owned & PrismQol::OWN_JUMP) m_aInputData[g_Config.m_ClDummy].m_Jump = 1;
+		if(Owned & PrismQol::OWN_HOOK) m_aInputData[g_Config.m_ClDummy].m_Hook = 1;
+		if(GameClient()->m_PrismMacros.TakeFirePulse())
+		{
+			if(!(m_aInputData[g_Config.m_ClDummy].m_Fire & 1))
+			{
+				m_aInputData[g_Config.m_ClDummy].m_Fire = (m_aInputData[g_Config.m_ClDummy].m_Fire + 1) & INPUT_STATE_MASK;
+				GameClient()->m_PrismMacroFireOwned = true;
+			}
+		}
+		else if(GameClient()->m_PrismMacroFireOwned)
+		{
+			if(m_aInputData[g_Config.m_ClDummy].m_Fire & 1)
+				m_aInputData[g_Config.m_ClDummy].m_Fire = (m_aInputData[g_Config.m_ClDummy].m_Fire + 1) & INPUT_STATE_MASK;
+			GameClient()->m_PrismMacroFireOwned = false;
+		}
 		// check if we need to send input
 		Send = Send || m_aInputData[g_Config.m_ClDummy].m_Direction != m_aLastData[g_Config.m_ClDummy].m_Direction;
 		Send = Send || m_aInputData[g_Config.m_ClDummy].m_Jump != m_aLastData[g_Config.m_ClDummy].m_Jump;
