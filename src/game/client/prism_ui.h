@@ -3,6 +3,7 @@
 #define GAME_CLIENT_PRISM_UI_H
 #include <base/color.h>
 #include <engine/shared/config.h>
+#include <algorithm>
 namespace PrismUi
 {
 struct STheme

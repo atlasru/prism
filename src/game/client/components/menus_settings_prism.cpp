@@ -7,6 +7,9 @@
 #include <engine/shared/config.h>
 #include <game/client/prism.h>
 #include <game/client/prism_qol.h>
+#include <game/client/prism_theme.h>
+#include <game/client/prism_ui.h>
+#include <game/client/prism_version.h>
 #include <game/client/ui_scrollregion.h>
 
 void CMenus::RenderSettingsPrism(CUIRect Screen)
@@ -21,9 +24,10 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	}
 
 	const float Fade = m_PrismTransition * m_PrismTransition * (3.0f - 2.0f * m_PrismTransition);
+	const PrismUi::STheme Theme(g_Config);
 	const float Opacity = g_Config.m_PrismPanelOpacity / 100.0f;
 	const float Scale = g_Config.m_PrismMenuScale / 100.0f;
-	Screen.Draw(ColorRGBA(0.012f, 0.018f, 0.030f, 0.66f * Fade), IGraphics::CORNER_NONE, 0.0f);
+	Screen.Draw(Theme.m_Background.WithAlpha(0.66f * Fade), IGraphics::CORNER_NONE, 0.0f);
 
 	CUIRect Panel = Screen;
 	Panel.w = std::min(Screen.w - 24.0f, 760.0f * Scale);
@@ -39,7 +43,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	CUIRect Edge = Panel;
 	Edge.Margin(-1.0f, &Edge);
 	Edge.Draw(ColorRGBA(0.61f, 0.72f, 0.83f, 0.18f * Fade), IGraphics::CORNER_ALL, 20.0f);
-	Panel.Draw(ColorRGBA(0.063f, 0.081f, 0.105f, Opacity * Fade), IGraphics::CORNER_ALL, 19.0f);
+	Panel.Draw(Theme.m_Panel.WithAlpha(Opacity * Fade), IGraphics::CORNER_ALL, 19.0f);
 	CUIRect Sheen;
 	Panel.HSplitTop(52.0f, &Sheen, nullptr);
 	Sheen.Draw(ColorRGBA(0.65f, 0.76f, 0.86f, 0.065f * Fade), IGraphics::CORNER_T, 19.0f);
@@ -55,7 +59,12 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Inner.HSplitBottom(25.0f, &Body, &Footer);
 	CUIRect Title, Close;
 	Header.VSplitRight(67.0f, &Title, &Close);
-	Ui()->DoLabel(&Title, "PRISM   /   CONTROL CENTER", 18.0f, TEXTALIGN_ML);
+	const float PreviousTextScaleX = TextRender()->GetTextScaleX();
+	TextRender()->SetFontPreset(EFontPreset::PRISM_HEADING);
+	TextRender()->SetTextScaleX(g_Config.m_PrismThemeHeadingWidth / 100.0f);
+	Ui()->DoLabel(&Title, "PRISM", 18.0f, TEXTALIGN_ML);
+	TextRender()->SetTextScaleX(PreviousTextScaleX);
+	TextRender()->SetFontPreset(EFontPreset::PRISM_BODY);
 	static CButtonContainer s_Close;
 	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.52f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
 	{
@@ -71,7 +80,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Content.Draw(ColorRGBA(0.034f, 0.049f, 0.068f, 0.45f * Fade), IGraphics::CORNER_ALL, 12.0f);
 	Content.Margin(12.0f, &Content);
 
-	static const char *s_apTabs[] = {"Dashboard", "Visuals", "Double Tee", "Macros", "HUD", "Performance", "Settings"};
+	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings"};
 	static CButtonContainer s_aTabs[7];
 	static float s_aTabBlend[7] = {};
 	for(int i = 0; i < 7; ++i)
@@ -82,7 +91,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		const float Target = m_PrismCategory == i ? 1.0f : 0.0f;
 		s_aTabBlend[i] += (Target - s_aTabBlend[i]) * Motion;
 		const float Highlight = s_aTabBlend[i];
-		const ColorRGBA ButtonColor(0.26f + Highlight * 0.16f, 0.32f + Highlight * 0.18f, 0.40f + Highlight * 0.20f, 0.10f + Highlight * 0.32f);
+		const ColorRGBA ButtonColor(Theme.m_Accent.r, Theme.m_Accent.g, Theme.m_Accent.b, 0.06f + Highlight * 0.36f);
 		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.42f, ButtonColor))
 		{
 			m_PrismCategory = i;
@@ -106,7 +115,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		if(!Scroll.RectClipped(Row))
 			Ui()->DoLabel(&Row, pLabel, 15.0f, TEXTALIGN_ML);
 	};
-	static float s_aToggleProgress[24] = {};
+	static float s_aToggleProgress[96] = {};
 	int ToggleIndex = 0;
 	auto Toggle = [&](const char *pLabel, int *pValue) {
 		CUIRect Row = NextRow(35.0f);
@@ -121,9 +130,12 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		Switch.VMargin(7.0f, &Switch);
 		Switch.HMargin(8.0f, &Switch);
 		const float Target = *pValue ? 1.0f : 0.0f;
-		s_aToggleProgress[Index] += (Target - s_aToggleProgress[Index]) * Motion;
-		const float Position = s_aToggleProgress[Index];
-		Switch.Draw(ColorRGBA(0.22f + 0.17f * Position, 0.26f + 0.27f * Position, 0.33f + 0.32f * Position, 0.9f), IGraphics::CORNER_ALL, 8.0f);
+		float &Progress = s_aToggleProgress[std::min(Index, 95)];
+		Progress += (Target - Progress) * Motion;
+		const float Position = Progress;
+		Switch.Draw(ColorRGBA(Theme.m_Panel.r + (Theme.m_Accent.r - Theme.m_Panel.r) * Position,
+			Theme.m_Panel.g + (Theme.m_Accent.g - Theme.m_Panel.g) * Position,
+			Theme.m_Panel.b + (Theme.m_Accent.b - Theme.m_Panel.b) * Position, 0.9f), IGraphics::CORNER_ALL, 8.0f);
 		CUIRect Knob = Switch;
 		Knob.w = 14.0f;
 		Knob.h = 14.0f;
@@ -142,7 +154,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 			Ui()->DoScrollbarOption(pValue, pValue, &Row, pLabel, Min, Max);
 		}
 	};
-	static CButtonContainer s_aColors[6];
+	static CButtonContainer s_aColors[16];
 	auto Color = [&](const char *pLabel, unsigned *pValue, int Index) {
 		CUIRect Row = NextRow(31.0f);
 		if(!Scroll.RectClipped(Row))
@@ -165,7 +177,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     };
     switch(m_PrismCategory)
     {
-    case 0: // Dashboard
+    case 6: // Settings and status
     {
         Label("Prism   /   Control center");
         Toggle("Enable Prism visuals", &g_Config.m_PrismEnabled);
@@ -178,9 +190,16 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Label("Insert / Esc: close     F12: emergency stop");
         if(Button("EMERGENCY STOP — release Prism inputs", 0, ColorRGBA(0.65f, 0.28f, 0.29f, 0.35f)))
             GameClient()->PrismEmergencyStop();
+        Label("Performance   /   measured locally");
+        Toggle("FPS and frame-time overlay", &g_Config.m_PrismOverlay);
+        Toggle("Performance HUD panel", &g_Config.m_PrismHudPerformance);
+        Slider("Menu scale", &g_Config.m_PrismMenuScale, 80, 120);
+        Slider("Glass opacity", &g_Config.m_PrismPanelOpacity, 50, 100);
+        Toggle("Reduce animation", &g_Config.m_PrismReducedMotion);
+        if(Button("Reset visual presets only", 15)) Prism::Reset(g_Config);
         break;
     }
-    case 1: // Visuals, including presets and all Tee/Hook adjustments
+    case 0: // Visuals, including presets and all Tee/Hook adjustments
     {
         Label("Visual presets");
         static const char *s_apPresets[] = {"Default", "Clean", "Competitive", "Cinematic", "Custom"};
@@ -216,9 +235,55 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Color("Hook color", &g_Config.m_PrismOtherHookColor, 5);
         Toggle("Glow", &g_Config.m_PrismOtherHookGlow);
         Slider("Glow strength", &g_Config.m_PrismOtherHookIntensity, 0, 100);
+        Label("Hook particles  /  cosmetic only");
+        if(Button(g_Config.m_PrismHookEffect == 0 ? "Mode: Off" :
+            g_Config.m_PrismHookEffect == 1 ? "Mode: Leaves" :
+            g_Config.m_PrismHookEffect == 2 ? "Mode: Sparkles" :
+            g_Config.m_PrismHookEffect == 3 ? "Mode: Hearts" : "Mode: Pulse", 16))
+            g_Config.m_PrismHookEffect = (g_Config.m_PrismHookEffect + 1) % 5;
+        Toggle("Local hook", &g_Config.m_PrismHookEffectLocal);
+        Toggle("Other visible hooks", &g_Config.m_PrismHookEffectOthers);
+        Color("Particle color", &g_Config.m_PrismHookParticleColor, 6);
+        Slider("Particle rate", &g_Config.m_PrismHookParticleRate, 1, 120);
+        Slider("Particle cap", &g_Config.m_PrismHookParticleCap, 0, 512);
+        Slider("Particle size", &g_Config.m_PrismHookParticleSize, 1, 24);
+        Slider("Particle lifetime", &g_Config.m_PrismHookParticleLifetime, 100, 3000);
+        Slider("Particle opacity", &g_Config.m_PrismHookParticleOpacity, 0, 100);
+        Slider("Particle spread", &g_Config.m_PrismHookParticleSpread, 0, 80);
+        Slider("Particle velocity", &g_Config.m_PrismHookParticleSpeed, 0, 100);
+        Toggle("Particle fade", &g_Config.m_PrismHookParticleFade);
+        Toggle("Particle glow", &g_Config.m_PrismHookParticleGlow);
+        Slider("Pulse frequency", &g_Config.m_PrismHookPulseFrequency, 1, 60);
+        Slider("Pulse intensity", &g_Config.m_PrismHookPulseIntensity, 0, 100);
+        Label("Player trail");
+        if(Button(g_Config.m_PrismTrail == 0 ? "Trail: Off" :
+            g_Config.m_PrismTrail == 1 ? "Trail: Line" :
+            g_Config.m_PrismTrail == 2 ? "Trail: Ribbon" : "Trail: Particles", 17))
+            g_Config.m_PrismTrail = (g_Config.m_PrismTrail + 1) % 4;
+        Toggle("Local trail", &g_Config.m_PrismTrailLocal);
+        Toggle("Other visible trails", &g_Config.m_PrismTrailOthers);
+        Color("Trail color", &g_Config.m_PrismTrailColor, 7);
+        Slider("Trail width", &g_Config.m_PrismTrailWidth, 1, 24);
+        Slider("Trail lifetime", &g_Config.m_PrismTrailLength, 50, 3000);
+        Slider("Sample interval", &g_Config.m_PrismTrailInterval, 8, 100);
+        Slider("Trail opacity", &g_Config.m_PrismTrailOpacity, 0, 100);
+        Toggle("Trail fade", &g_Config.m_PrismTrailFade);
+        Toggle("Trail glow", &g_Config.m_PrismTrailGlow);
+        Label("Player highlight  /  normally visible Tees");
+        Toggle("Highlight", &g_Config.m_PrismHighlight);
+        Toggle("Local Tee", &g_Config.m_PrismHighlightLocal);
+        Toggle("Other visible Tees", &g_Config.m_PrismHighlightOthers);
+        Color("Highlight color", &g_Config.m_PrismHighlightColor, 8);
+        Slider("Fill opacity", &g_Config.m_PrismHighlightFill, 0, 100);
+        Slider("Outline opacity", &g_Config.m_PrismHighlightOpacity, 0, 100);
+        Slider("Outline width", &g_Config.m_PrismHighlightWidth, 1, 8);
+        Slider("Box scale", &g_Config.m_PrismHighlightScale, 50, 200);
+        Slider("Corner radius", &g_Config.m_PrismHighlightRounding, 0, 24);
+        Label("Effects quality");
+        Slider("Quality: low / medium / high", &g_Config.m_PrismEffectQuality, 0, 2);
         break;
     }
-    case 2: // Double Tee
+    case 3: // QoL and Double Tee
         Label("Double Tee   /   input composition");
         Toggle("Assistant active", &g_Config.m_PrismDoubleEnabled);
         if(Button(g_Config.m_PrismDoubleMode == 0 ? "Mode: movement copying" :
@@ -232,7 +297,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         if(Button("Stop now and release owned inputs", 4, ColorRGBA(0.65f, 0.28f, 0.29f, 0.35f)))
             GameClient()->PrismEmergencyStop();
         break;
-    case 3: // Strictly bounded visual macro editor
+    case 4: // Strictly bounded visual macro editor
     {
         Label("Macros   /   visual sequence editor");
         static int s_SelectedMacro = 0;
@@ -328,31 +393,75 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Label("Actions only affect game input. No shell or scripts.");
         break;
     }
-    case 4: // HUD drag/drop + layout and per-module visibility
+    case 1: // HUD drag/drop + layout and per-module visibility
     {
         Label("Modular HUD   /   drag handles to reposition");
         Toggle("Enable all modules", &g_Config.m_PrismHudEnabled);
         Slider("HUD scale (%)", &g_Config.m_PrismHudScale, 65, 150);
         Slider("HUD opacity (%)", &g_Config.m_PrismHudOpacity, 20, 100);
-        static const char *s_apModuleNames[] = {"Active Hotkeys", "Prism name/version", "Performance", "Dummy Status", "Verified Staff"};
+        static const char *s_apModuleNames[] = {"Active Hotkeys", "Prism name/version", "Performance", "Dummy Status", "Verified Staff", "Input Overlay", "Effects Status"};
         int *apEnabled[] = {&g_Config.m_PrismHudHotkeys, &g_Config.m_PrismHudIdentity,
-            &g_Config.m_PrismHudPerformance, &g_Config.m_PrismHudDummy, &g_Config.m_PrismHudStaff};
+            &g_Config.m_PrismHudPerformance, &g_Config.m_PrismHudDummy, &g_Config.m_PrismHudStaff,
+            &g_Config.m_PrismHudInput, &g_Config.m_PrismHudEffects};
         int *apX[] = {&g_Config.m_PrismHudHotkeysX, &g_Config.m_PrismHudIdentityX,
-            &g_Config.m_PrismHudPerformanceX, &g_Config.m_PrismHudDummyX, &g_Config.m_PrismHudStaffX};
+            &g_Config.m_PrismHudPerformanceX, &g_Config.m_PrismHudDummyX, &g_Config.m_PrismHudStaffX,
+            &g_Config.m_PrismHudInputX, &g_Config.m_PrismHudEffectsX};
         int *apY[] = {&g_Config.m_PrismHudHotkeysY, &g_Config.m_PrismHudIdentityY,
-            &g_Config.m_PrismHudPerformanceY, &g_Config.m_PrismHudDummyY, &g_Config.m_PrismHudStaffY};
-        for(int i = 0; i < 5; ++i) Toggle(s_apModuleNames[i], apEnabled[i]);
+            &g_Config.m_PrismHudPerformanceY, &g_Config.m_PrismHudDummyY, &g_Config.m_PrismHudStaffY,
+            &g_Config.m_PrismHudInputY, &g_Config.m_PrismHudEffectsY};
+        int *apScale[] = {&g_Config.m_PrismHudHotkeysScale, &g_Config.m_PrismHudIdentityScale,
+            &g_Config.m_PrismHudPerformanceScale, &g_Config.m_PrismHudDummyScale, &g_Config.m_PrismHudStaffScale,
+            &g_Config.m_PrismHudInputScale, &g_Config.m_PrismHudEffectsScale};
+        static const char *s_apHudPresets[] = {"Minimal", "Streaming", "Competitive", "Custom"};
+        for(int Preset = 0; Preset < 4; ++Preset)
+        {
+            if(Button(s_apHudPresets[Preset], 24 + Preset))
+            {
+                if(Preset != PrismQol::HUD_CUSTOM)
+                {
+                    const auto Layout = PrismQol::HudPreset(Preset);
+                    for(int i = 0; i < PrismQol::NUM_HUD_MODULES; ++i)
+                    {
+                        *apEnabled[i] = Layout.m_aEnabled[i];
+                        *apX[i] = Layout.m_aX[i];
+                        *apY[i] = Layout.m_aY[i];
+                    }
+                }
+                g_Config.m_PrismHudPreset = Preset;
+            }
+        }
+        for(int i = 0; i < 7; ++i) Toggle(s_apModuleNames[i], apEnabled[i]);
+        Slider("Module scale: Active Hotkeys", apScale[0], 65, 150);
+        Slider("Module scale: Identity", apScale[1], 65, 150);
+        Slider("Module scale: Performance", apScale[2], 65, 150);
+        Slider("Module scale: Dummy", apScale[3], 65, 150);
+        Slider("Module scale: Staff", apScale[4], 65, 150);
+        Slider("Module scale: Input", apScale[5], 65, 150);
+        Slider("Module scale: Effects", apScale[6], 65, 150);
+        Toggle("HUD background", &g_Config.m_PrismHudBackground);
+        Toggle("Snap to guides", &g_Config.m_PrismHudSnap);
+        Toggle("Show guides", &g_Config.m_PrismHudGuides);
+        Slider("Padding", &g_Config.m_PrismHudPadding, 0, 16);
+        Slider("Rounding", &g_Config.m_PrismHudRounding, 0, 12);
+        Slider("Font size", &g_Config.m_PrismHudFontSize, 5, 12);
+        Label("Physical input overlay");
+        Slider("Key size", &g_Config.m_PrismInputKeySize, 12, 32);
+        Slider("Key rounding", &g_Config.m_PrismInputRounding, 0, 12);
+        Toggle("Action labels", &g_Config.m_PrismInputLabels);
+        Toggle("Key animation", &g_Config.m_PrismInputAnimation);
+        Color("Pressed key", &g_Config.m_PrismInputActiveColor, 9);
+        Color("Released key", &g_Config.m_PrismInputInactiveColor, 10);
         Label("Layout preview  /  drag enabled modules");
         CUIRect Preview = NextRow(165.0f);
         if(!Scroll.RectClipped(Preview))
         {
             Preview.Draw(ColorRGBA(0.018f, 0.031f, 0.047f, 0.75f), IGraphics::CORNER_ALL, 9.0f);
-            static CButtonContainer s_aPins[5];
+            static CButtonContainer s_aPins[7];
             static int s_DragIndex = -1;
             static float s_DragOffsetX = 0.0f, s_DragOffsetY = 0.0f;
             if(!Ui()->MouseButton(0))
             { s_DragIndex = -1; }
-            for(int i = 0; i < 5; ++i)
+            for(int i = 0; i < 7; ++i)
             {
                 if(!*apEnabled[i]) continue;
                 CUIRect Pin;
@@ -369,8 +478,16 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
                 if(s_DragIndex == i && Ui()->MouseButton(0))
                 {
                     Ui()->CheckActiveItem(&s_aPins[i]);
-                    *apX[i] = PrismQol::HudNormalize(Ui()->MouseX() - s_DragOffsetX - Preview.x, Preview.w);
-                    *apY[i] = PrismQol::HudNormalize(Ui()->MouseY() - s_DragOffsetY - Preview.y, Preview.h);
+                    float NewX = Ui()->MouseX() - s_DragOffsetX - Preview.x;
+                    float NewY = Ui()->MouseY() - s_DragOffsetY - Preview.y;
+                    if(g_Config.m_PrismHudSnap)
+                    {
+                        NewX = PrismQol::HudSnap(NewX, Preview.w, Pin.w);
+                        NewY = PrismQol::HudSnap(NewY, Preview.h, Pin.h);
+                    }
+                    *apX[i] = PrismQol::HudNormalize(NewX, Preview.w);
+                    *apY[i] = PrismQol::HudNormalize(NewY, Preview.h);
+                    g_Config.m_PrismHudPreset = PrismQol::HUD_CUSTOM;
                     Pin.x = Preview.x + PrismQol::HudCoordinate(*apX[i], Preview.w, Pin.w);
                     Pin.y = Preview.y + PrismQol::HudCoordinate(*apY[i], Preview.h, Pin.h);
                 }
@@ -381,37 +498,48 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         }
         if(Button("Reset HUD layout", 14))
         {
-            const int aX[] = {300, 300, 8200, 300, 8200};
-            const int aY[] = {900, 250, 250, 1600, 950};
-            for(int i = 0; i < 5; ++i) { *apX[i] = aX[i]; *apY[i] = aY[i]; }
+            const int aX[] = {300, 300, 8200, 300, 8200, 300, 7600};
+            const int aY[] = {900, 250, 250, 1600, 950, 7500, 1800};
+            for(int i = 0; i < 7; ++i) { *apX[i] = aX[i]; *apY[i] = aY[i]; }
             g_Config.m_PrismHudScale = 100;
             g_Config.m_PrismHudOpacity = 85;
         }
         Label("Staff appears only with server-supplied auth data.");
         break;
     }
-    case 5: // Performance
-        Label("Performance   /   measured locally");
-        Toggle("FPS and frame-time overlay", &g_Config.m_PrismOverlay);
-        Toggle("Performance HUD panel", &g_Config.m_PrismHudPerformance);
-        Toggle("Enable Prism visual effects", &g_Config.m_PrismEnabled);
-        Toggle("Local Tee glow", &g_Config.m_PrismLocalGlow);
-        Toggle("Other Tee glow", &g_Config.m_PrismOtherGlow);
-        Toggle("Local Hook glow", &g_Config.m_PrismLocalHookGlow);
-        Toggle("Other Hook glow", &g_Config.m_PrismOtherHookGlow);
-        Label("No GPU framebuffer blur or per-frame heap work.");
+    case 2: // Physical input overlay
+        Label("Input overlay  /  physical controls");
+        Toggle("Show input overlay", &g_Config.m_PrismHudInput);
+        Slider("Key size", &g_Config.m_PrismInputKeySize, 12, 32);
+        Slider("Key rounding", &g_Config.m_PrismInputRounding, 0, 12);
+        Toggle("Action labels", &g_Config.m_PrismInputLabels);
+        Toggle("Key animation", &g_Config.m_PrismInputAnimation);
+        Color("Pressed key", &g_Config.m_PrismInputActiveColor, 9);
+        Color("Released key", &g_Config.m_PrismInputInactiveColor, 10);
+        Label("Movement, Jump, Hook and Fire use physical input.");
         break;
-    case 6: // Settings
-        Label("Interface   /   restrained glass");
-        Slider("Menu scale", &g_Config.m_PrismMenuScale, 80, 120);
-        Slider("Glass opacity", &g_Config.m_PrismPanelOpacity, 50, 100);
-        Toggle("Reduce animation", &g_Config.m_PrismReducedMotion);
+    case 5: // Themes
+        Label("Themes   /   Prism identity");
+        if(Button("Theme: Orange graphite", 18)) PrismUi::ApplyTheme(g_Config, 0);
+        if(Button("Theme: Glacier", 19)) PrismUi::ApplyTheme(g_Config, 1);
+        if(Button("Theme: Violet", 20)) PrismUi::ApplyTheme(g_Config, 2);
+        Color("Accent", &g_Config.m_PrismThemeAccent, 11);
+        Color("Background", &g_Config.m_PrismThemeBackground, 12);
+        Color("Panel", &g_Config.m_PrismThemePanel, 13);
+        Color("Text", &g_Config.m_PrismThemeText, 14);
+        Slider("Heading width (%)", &g_Config.m_PrismThemeHeadingWidth, 100, 140);
+        Slider("Corner radius", &g_Config.m_PrismThemeRounding, 0, 20);
+        Slider("Border opacity", &g_Config.m_PrismThemeBorder, 0, 100);
+        Slider("Shadow opacity", &g_Config.m_PrismThemeShadow, 0, 100);
+        Slider("Animation duration", &g_Config.m_PrismThemeAnimation, 80, 400);
+        if(Button("Export theme to prism/theme.json", 21)) PrismTheme::Save(Storage(), g_Config);
+        if(Button("Import theme from prism/theme.json", 22)) PrismTheme::Load(Storage(), g_Config);
         Label("Visual presets do not change macros or HUD layouts.");
-        if(Button("Reset visual presets only", 15)) Prism::Reset(g_Config);
         break;
     }
 	Scroll.End();
 	Footer.Draw(ColorRGBA(0.65f, 0.75f, 0.85f, 0.065f), IGraphics::CORNER_ALL, 8.0f);
-	Ui()->DoLabel(&Footer, "PRISM 0.1  /  Insert or Esc to close", 11.0f, TEXTALIGN_MC);
+	Ui()->DoLabel(&Footer, "PRISM " PRISM_VERSION "  /  Insert or Esc to close", 11.0f, TEXTALIGN_MC);
+	TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 	Prism::Validate(g_Config);
 }

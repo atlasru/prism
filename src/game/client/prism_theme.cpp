@@ -1,7 +1,8 @@
 // Prism additions, distributed under the zlib license in license.txt.
 #include "prism_theme.h"
 
-#include <base/system.h>
+#include <base/io.h>
+#include <base/types.h>
 #include <engine/shared/config.h>
 #include <engine/shared/json.h>
 #include <engine/storage.h>

@@ -667,6 +667,7 @@ public:
 	bool IsInit() const { return m_IsInit; }
 
 	bool IsActive() const { return m_MenuActive; }
+	bool IsPrismOpen() const { return m_PrismOpen; }
 	void SetActive(bool Active);
 
 	void OnInterfacesInit(CGameClient *pClient) override;
@@ -862,4 +863,3 @@ private:
 	void RenderGhost(CUIRect MainView);
 };
 #endif
-

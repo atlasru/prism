@@ -1963,7 +1963,7 @@ void CHud::RenderPrismModules()
 		{g_Config.m_PrismHudInput, g_Config.m_PrismHudInputX, g_Config.m_PrismHudInputY, g_Config.m_PrismHudInputScale},
 		{g_Config.m_PrismHudEffects, g_Config.m_PrismHudEffectsX, g_Config.m_PrismHudEffectsY, g_Config.m_PrismHudEffectsScale},
 	};
-	const ColorRGBA Accent(1.0f, 0.54f, 0.067f, Opacity);
+	const ColorRGBA Accent = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismThemeAccent)).WithAlpha(Opacity);
 	for(int Module = 0; Module < PrismQol::NUM_HUD_MODULES; ++Module)
 	{
 		if(!aModules[Module].m_Enabled)
@@ -1986,7 +1986,7 @@ void CHud::RenderPrismModules()
 			Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.09f, 0.098f, 0.106f, Opacity), IGraphics::CORNER_ALL,
 				std::min(std::clamp(g_Config.m_PrismHudRounding, 0, 12) * Scale, Height / 2.0f));
 			Graphics()->DrawRect(X + Pad, Y + Pad + RowHeight - Scale, std::max(1.0f, Width - Pad * 2.0f), Scale,
-				ColorRGBA(1.0f, 0.54f, 0.067f, Opacity * 0.3f), 0, 0.0f);
+				Accent.WithAlpha(Opacity * 0.3f), 0, 0.0f);
 		}
 		auto Text = [&](int Row, const char *pText, bool Heading = false) {
 			TextRender()->TextColor(Heading ? Accent : ColorRGBA(0.94f, 0.94f, 0.95f, Opacity));
@@ -2074,8 +2074,10 @@ void CHud::RenderPrismModules()
 				m_PrismBindRefresh = Now;
 			}
 			const auto &Controls = GameClient()->m_Controls;
-			const auto &State = Controls.m_aPrismLastOutput[g_Config.m_ClDummy];
-			const bool aPressed[] = {State.m_Direction < 0, State.m_Jump != 0, State.m_Direction > 0, (State.m_Fire & 1) != 0, State.m_Hook != 0};
+			const int Dummy = g_Config.m_ClDummy;
+			const auto &Physical = Controls.m_aInputData[Dummy];
+			const bool aPressed[] = {Controls.m_aInputDirectionLeft[Dummy] != 0, Physical.m_Jump != 0,
+				Controls.m_aInputDirectionRight[Dummy] != 0, (Physical.m_Fire & 1) != 0, Physical.m_Hook != 0};
 			const char *apActions[] = {"Left", "Jump", "Right", "Fire", "Hook"};
 			const float KeySize = std::clamp(g_Config.m_PrismInputKeySize, 12, 32) * Scale;
 			const float Gap = 2.0f * Scale;
@@ -2084,10 +2086,14 @@ void CHud::RenderPrismModules()
 			for(int Key = 0; Key < 5; ++Key)
 			{
 				const float Target = aPressed[Key] ? 1.0f : 0.0f;
-				const float Delta = std::clamp(Client()->FrameTime() / 0.14f, 0.0f, 1.0f);
+				const float Delta = std::clamp(Client()->RenderFrameTime() / 0.14f, 0.0f, 1.0f);
 				m_aPrismInputFade[Key] = g_Config.m_PrismInputAnimation && !g_Config.m_PrismReducedMotion ?
 					m_aPrismInputFade[Key] + (Target - m_aPrismInputFade[Key]) * Delta : Target;
-				ColorRGBA Fill = mix(Inactive, Active, m_aPrismInputFade[Key]);
+				const float Blend = m_aPrismInputFade[Key];
+				ColorRGBA Fill(Inactive.r + (Active.r - Inactive.r) * Blend,
+					Inactive.g + (Active.g - Inactive.g) * Blend,
+					Inactive.b + (Active.b - Inactive.b) * Blend,
+					Inactive.a + (Active.a - Inactive.a) * Blend);
 				Fill.a *= Opacity;
 				const int Col = Key < 3 ? Key : (Key == 3 ? 0 : 2);
 				const int Row = Key < 3 ? 0 : 1;

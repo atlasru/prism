@@ -1507,7 +1507,13 @@ set(EXPECTED_DATA
   fonts/DejaVuSans.ttf
   fonts/Font_Awesome_6_Free-Solid-900.otf
   fonts/GlowSansJ-Compressed-Book.otf
+  fonts/Manrope-LICENSE.txt
+  fonts/Manrope-Medium.ttf
+  fonts/Manrope-SemiBold.ttf
+  fonts/PRISM-FONTS.txt
   fonts/SourceHanSans.ttc
+  fonts/Unbounded-ExtraBold.ttf
+  fonts/Unbounded-LICENSE.txt
   fonts/index.json
   game.png
   gui_buttons.png
@@ -2199,7 +2205,6 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   config.cpp
   config.h
   config_variables.h
-  prism_variables.h
   console.cpp
   console.h
   csv.cpp
@@ -2252,6 +2257,10 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   network_stun.cpp
   packer.cpp
   packer.h
+  prism_effect_variables.h
+  prism_qol_variables.h
+  prism_theme_variables.h
+  prism_variables.h
   protocol.h
   protocol7.h
   protocol_ex.cpp
@@ -2556,7 +2565,6 @@ if(CLIENT)
     components/menus_ingame_touch_controls.cpp
     components/menus_ingame_touch_controls.h
     components/menus_settings.cpp
-    components/menus_settings_prism.cpp
     components/menus_settings_appearance.cpp
     components/menus_settings_assets.cpp
     components/menus_settings_controls.cpp
@@ -2567,6 +2575,7 @@ if(CLIENT)
     components/menus_settings_graphics.cpp
     components/menus_settings_language.cpp
     components/menus_settings_player.cpp
+    components/menus_settings_prism.cpp
     components/menus_settings_sound.cpp
     components/menus_settings_tee.cpp
     components/menus_settings_tee7.cpp
@@ -2608,15 +2617,6 @@ if(CLIENT)
     lineinput.h
     pickup_data.cpp
     pickup_data.h
-    prism.h
-    prism_effects.h
-    prism_effects_render.h
-    prism_input.h
-    prism_qol.h
-    prism_theme.cpp
-    prism_theme.h
-    prism_ui.h
-    prism_version.h
     prediction/entities/character.cpp
     prediction/entities/character.h
     prediction/entities/door.cpp
@@ -2635,6 +2635,15 @@ if(CLIENT)
     prediction/entity.h
     prediction/gameworld.cpp
     prediction/gameworld.h
+    prism.h
+    prism_effects.h
+    prism_effects_render.h
+    prism_input.h
+    prism_qol.h
+    prism_theme.cpp
+    prism_theme.h
+    prism_ui.h
+    prism_version.h
     projectile_data.cpp
     projectile_data.h
     race.cpp
