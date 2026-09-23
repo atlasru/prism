@@ -3,6 +3,7 @@
 
 #include "gameclient.h"
 #include "prism.h"
+#include "prism_version.h"
 
 #include "components/background.h"
 #include "components/binds.h"
@@ -363,11 +364,11 @@ void CGameClient::OnInit()
 
 	if(GIT_SHORTREV_HASH)
 	{
-		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism 0.1.0 / DDNet %s (%s)", GAME_RELEASE_VERSION, GIT_SHORTREV_HASH);
+		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism " PRISM_VERSION " / DDNet %s (%s)", GAME_RELEASE_VERSION, GIT_SHORTREV_HASH);
 	}
 	else
 	{
-		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism 0.1.0 / DDNet %s", GAME_RELEASE_VERSION);
+		str_format(m_aDDNetVersionStr, sizeof(m_aDDNetVersionStr), "Prism " PRISM_VERSION " / DDNet %s", GAME_RELEASE_VERSION);
 	}
 
 	// TODO: this should be different
@@ -471,9 +472,7 @@ void CGameClient::OnInit()
 void CGameClient::OnUpdate()
 {
 	HandleLanguageChanged();
-	const bool CanRunPrism = Client()->State() == IClient::STATE_ONLINE &&
-		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() &&
-		!m_Menus.IsActive() && !m_Chat.IsActive() && !m_GameConsole.IsActive() && !DemoPlayer()->IsPlaying();
+	const bool CanRunPrism = PrismInputAllowed();
 	const int64_t PrismTimeMs = time_get() * 1000 / time_freq();
 	m_PrismMacros.Configure(0, g_Config.m_PrismMacro1, g_Config.m_PrismMacro1Bind, g_Config.m_PrismMacro1Mode, g_Config.m_PrismMacro1Enabled != 0);
 	m_PrismMacros.Configure(1, g_Config.m_PrismMacro2, g_Config.m_PrismMacro2Bind, g_Config.m_PrismMacro2Mode, g_Config.m_PrismMacro2Enabled != 0);
@@ -544,8 +543,7 @@ void CGameClient::OnInput(const IInput::CEvent &Event)
 		PrismEmergencyStop();
 		return;
 	}
-	if(Pressed && !m_Menus.IsActive() && !m_Chat.IsActive() && !m_GameConsole.IsActive() && Client()->State() == IClient::STATE_ONLINE &&
-		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive())
+	if(Pressed && PrismInputAllowed())
 	{
 		if(!(Event.m_Flags & IInput::FLAG_REPEAT) && g_Config.m_PrismDoubleBind && Event.m_Key == g_Config.m_PrismDoubleBind)
 		{
@@ -564,6 +562,14 @@ void CGameClient::OnInput(const IInput::CEvent &Event)
 	}
 }
 
+bool CGameClient::PrismInputAllowed()
+{
+ return Client()->State() == IClient::STATE_ONLINE &&
+  Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() &&
+  !m_Menus.IsActive() && !m_Menus.IsPrismOpen() && !m_Chat.IsActive() &&
+  !m_GameConsole.IsActive() && !DemoPlayer()->IsPlaying() && !m_Snap.m_SpecInfo.m_Active;
+}
+
 void CGameClient::PrismEmergencyStop()
 {
 	g_Config.m_PrismDoubleEnabled = 0;
@@ -574,6 +580,8 @@ void CGameClient::PrismEmergencyStop()
 
 void CGameClient::OnDummySwap()
 {
+	m_PrismMacros.Cancel();
+	m_PrismHammerCounter = 0;
 	if(g_Config.m_ClDummyResetOnSwitch)
 	{
 		int PlayerOrDummy = (g_Config.m_ClDummyResetOnSwitch == 2) ? g_Config.m_ClDummy : (!g_Config.m_ClDummy);
@@ -583,6 +591,10 @@ void CGameClient::OnDummySwap()
 	const int PrevDummyFire = m_DummyInput.m_Fire;
 	m_DummyInput = m_Controls.m_aInputData[!g_Config.m_ClDummy];
 	m_Controls.m_aInputData[g_Config.m_ClDummy].m_Fire = PrevDummyFire;
+ // DDNet switches physical input sources here. Keep each connection's wire
+ // counter, but do not interpret this source change as a burst of fire edges.
+ m_Controls.m_aPrismFire[g_Config.m_ClDummy].RebaseSource(PrevDummyFire, INPUT_STATE_MASK);
+ m_Controls.m_aPrismFire[!g_Config.m_ClDummy].RebaseSource(m_DummyInput.m_Fire, INPUT_STATE_MASK);
 	m_IsDummySwapping = 1;
 }
 
@@ -597,11 +609,11 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 		return 0;
 	}
 
-	const bool PrismAllowed = Client()->State() == IClient::STATE_ONLINE && Client()->DummyConnected() &&
-		Kernel()->RequestInterface<IEngineGraphics>()->WindowActive() && !m_Menus.IsActive() &&
-		!m_Chat.IsActive() && !DemoPlayer()->IsPlaying();
-	const bool Assisted = PrismAllowed && g_Config.m_PrismDoubleEnabled && m_aLocalIds[0] >= 0 && m_aLocalIds[1] >= 0;
-	if(Assisted || m_PrismLastAssisted || m_PrismDummyFireOwned)
+ const int Other = !g_Config.m_ClDummy;
+ auto &Fire = m_Controls.m_aPrismFire[Other];
+ const bool Assisted = PrismInputAllowed() && Client()->DummyConnected() &&
+  g_Config.m_PrismDoubleEnabled && m_aLocalIds[0] >= 0 && m_aLocalIds[1] >= 0;
+ if(Assisted || m_aPrismLastAssisted[Other] || Fire.Owned())
 	{
 		CNetObj_PlayerInput Input = m_DummyInput;
 		const int Controlled = g_Config.m_ClDummy;
@@ -633,25 +645,9 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 			}
 		}
 		else m_PrismHammerCounter = 0;
-		if(HammerPulse && !(Input.m_Fire & 1))
-		{
-			m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
-			if(!(m_PrismDummyFire & 1)) m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
-			Input.m_Fire = m_PrismDummyFire;
-			m_PrismDummyFireOwned = true;
-		}
-		else if(m_PrismDummyFireOwned)
-		{
-			if(!(Input.m_Fire & 1))
-			{
-				m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
-				if(m_PrismDummyFire & 1) m_PrismDummyFire = (m_PrismDummyFire + 1) & INPUT_STATE_MASK;
-				Input.m_Fire = m_PrismDummyFire;
-			}
-			m_PrismDummyFireOwned = false;
-		}
-		else m_PrismDummyFire = Input.m_Fire;
-		m_PrismLastAssisted = Assisted;
+  Input.m_Fire = Fire.Compose(Input.m_Fire, HammerPulse, INPUT_STATE_MASK);
+  m_aPrismLastAssisted[Other] = Assisted;
+  m_Controls.m_aPrismLastOutput[Other] = Input;
 		mem_copy(pData, &Input, sizeof(Input));
 		return sizeof(Input);
 	}
@@ -668,8 +664,11 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 			return 0;
 		}
 
-		mem_copy(pData, &m_DummyInput, sizeof(m_DummyInput));
-		return sizeof(m_DummyInput);
+  CNetObj_PlayerInput Output = m_DummyInput;
+  Output.m_Fire = Fire.Compose(Output.m_Fire, false, INPUT_STATE_MASK);
+  m_Controls.m_aPrismLastOutput[Other] = Output;
+  mem_copy(pData, &Output, sizeof(Output));
+  return sizeof(Output);
 	}
 	else
 	{
@@ -691,8 +690,11 @@ int CGameClient::OnSnapInput(int *pData, bool Dummy, bool Force)
 		m_HammerInput.m_TargetX = (int)Dir.x;
 		m_HammerInput.m_TargetY = (int)Dir.y;
 
-		mem_copy(pData, &m_HammerInput, sizeof(m_HammerInput));
-		return sizeof(m_HammerInput);
+  CNetObj_PlayerInput Output = m_HammerInput;
+  Output.m_Fire = Fire.Compose(Output.m_Fire, false, INPUT_STATE_MASK);
+  m_Controls.m_aPrismLastOutput[Other] = Output;
+  mem_copy(pData, &Output, sizeof(Output));
+  return sizeof(Output);
 	}
 }
 
@@ -797,12 +799,7 @@ void CGameClient::OnReset()
 	m_HammerInput = {};
 	m_DummyFire = 0;
 	m_PrismMacros.Cancel();
-	m_PrismMacroFireOwned = false;
-	m_PrismMacroFireCounter = 0;
-	m_PrismMacroLastManualFire = 0;
-	m_PrismLastAssisted = false;
-	m_PrismDummyFireOwned = false;
-	m_PrismDummyFire = 0;
+	std::fill(std::begin(m_aPrismLastAssisted), std::end(m_aPrismLastAssisted), false);
 	m_PrismHammerCounter = 0;
 	m_ReceivedDDNetPlayer = false;
 	m_ReceivedDDNetPlayerFinishTimes = false;
@@ -1033,8 +1030,8 @@ void CGameClient::OnRender()
 void CGameClient::OnDummyDisconnect()
 {
 	m_PrismMacros.Cancel();
-	m_PrismLastAssisted = false;
-	m_PrismDummyFireOwned = false;
+	std::fill(std::begin(m_aPrismLastAssisted), std::end(m_aPrismLastAssisted), false);
+	m_Controls.m_aPrismFire[1].Reset(0, INPUT_STATE_MASK);
 	m_PrismHammerCounter = 0;
 	m_aLocalIds[1] = -1;
 	m_aDDRaceMsgSent[1] = false;
@@ -1177,6 +1174,8 @@ void CGameClient::FormatClientId(int ClientId, char (&aClientId)[16], EClientIdF
 
 void CGameClient::OnRelease()
 {
+	m_PrismMacros.Cancel();
+	m_PrismHammerCounter = 0;
 	// release all systems
 	for(auto &pComponent : m_vpAll)
 		pComponent->OnRelease();

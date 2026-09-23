@@ -3,6 +3,7 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 #include "hud.h"
 #include <game/client/prism_qol.h>
+#include <game/client/prism_version.h>
 
 #include "binds.h"
 #include "camera.h"
@@ -77,6 +78,8 @@ void CHud::OnWindowResize()
 
 void CHud::OnReset()
 {
+	m_PrismBindRefresh = 0;
+	std::fill(std::begin(m_aPrismInputFade), std::end(m_aPrismInputFade), 0.0f);
 	m_TimeCpDiff = 0.0f;
 	m_DDRaceTime = 0;
 	m_FinishTimeLastReceivedTick = 0;
@@ -1940,75 +1943,200 @@ void CHud::RenderRecord()
 }
 
 
-// Dedicated Prism HUD: fixed stack buffers, normalized coordinates and no lists
-// of "staff" inferred from names, clan tags, skins or chat messages.
+// Dedicated Prism HUD: bounded stack storage and normalized, recoverable positions.
+// Staff status comes exclusively from server-supplied auth information.
 void CHud::RenderPrismModules()
 {
-    if(!g_Config.m_PrismHudEnabled || Client()->State() != IClient::STATE_ONLINE)
-        return;
-    const int Scale = std::clamp(g_Config.m_PrismHudScale, 65, 150);
-    const float Opacity = std::clamp(g_Config.m_PrismHudOpacity, 20, 100) / 100.0f;
-    struct SModule
-    {
-        int *m_pEnabled;
-        int *m_pX;
-        int *m_pY;
-    };
-    SModule aModules[] = {
-        {&g_Config.m_PrismHudHotkeys, &g_Config.m_PrismHudHotkeysX, &g_Config.m_PrismHudHotkeysY},
-        {&g_Config.m_PrismHudIdentity, &g_Config.m_PrismHudIdentityX, &g_Config.m_PrismHudIdentityY},
-        {&g_Config.m_PrismHudPerformance, &g_Config.m_PrismHudPerformanceX, &g_Config.m_PrismHudPerformanceY},
-        {&g_Config.m_PrismHudDummy, &g_Config.m_PrismHudDummyX, &g_Config.m_PrismHudDummyY},
-        {&g_Config.m_PrismHudStaff, &g_Config.m_PrismHudStaffX, &g_Config.m_PrismHudStaffY},
-    };
-    for(int i = 0; i < 5; ++i)
-    {
-        if(!*aModules[i].m_pEnabled)
-            continue;
-        char aText[192] = {};
-        switch(i)
-        {
-        case 0:
-            str_format(aText, sizeof(aText), "Hotkeys  %s | macros %d", g_Config.m_PrismDoubleEnabled ? "Double Tee ON" : "Double Tee OFF", GameClient()->m_PrismMacros.ActiveCount());
-            break;
-        case 1:
-            str_copy(aText, "PRISM  /  0.1.0  Phase 3");
-            break;
-        case 2:
-            str_format(aText, sizeof(aText), "Performance  %.0f FPS  %.2f ms", 1.0f / std::max(0.00001f, Client()->FrameTimeAverage()), Client()->FrameTimeAverage() * 1000.0f);
-            break;
-        case 3:
-            str_format(aText, sizeof(aText), "Dummy  %s | %s", Client()->DummyConnected() ? "connected" : "offline", g_Config.m_PrismDoubleEnabled ? "assistant ON" : "assistant OFF");
-            break;
-        case 4:
-        {
-            int Verified = 0;
-            const char *pVerifiedName = nullptr;
-            for(int Id = 0; Id < MAX_CLIENTS; ++Id)
-            {
-                // Auth level comes exclusively from server-supplied client state.
-                // No guesses based on nicknames or third-party staff lists.
-                if(GameClient()->m_aClients[Id].m_Active && GameClient()->m_aClients[Id].m_AuthLevel > 0 && GameClient()->m_Snap.m_apPlayerInfos[Id])
-                {
-                    ++Verified;
-                    if(!pVerifiedName) pVerifiedName = GameClient()->m_aClients[Id].m_aName;
-                }
-            }
-            if(Verified)
-                str_format(aText, sizeof(aText), "Verified server staff: %d | %s", Verified, pVerifiedName);
-            else
-                str_copy(aText, "Staff: no server-verified status available");
-            break;
-        }
-        }
-        const float Width = 185.0f * Scale / 100.0f;
-        const float Height = 18.0f * Scale / 100.0f;
-        const float X = PrismQol::HudCoordinate(*aModules[i].m_pX, m_Width, Width);
-        const float Y = PrismQol::HudCoordinate(*aModules[i].m_pY, m_Height, Height);
-        Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.065f, 0.08f, 0.11f, 0.73f * Opacity), IGraphics::CORNER_ALL, 4.0f);
-        Graphics()->DrawRect(X + 1.0f, Y + 1.0f, Width - 2.0f, 1.0f, ColorRGBA(0.8f, 0.86f, 0.95f, 0.10f * Opacity), IGraphics::CORNER_ALL, 1.0f);
-        TextRender()->TextColor(0.91f, 0.94f, 0.98f, Opacity);
-        TextRender()->Text(X + 5.0f, Y + 5.0f * Scale / 100.0f, 7.0f * Scale / 100.0f, aText, Width - 9.0f);
-    }
-    TextRender()->TextColor(TextRender()->DefaultTextColor());
+	if(!g_Config.m_PrismHudEnabled || Client()->State() != IClient::STATE_ONLINE)
+		return;
+	const float Opacity = std::clamp(g_Config.m_PrismHudOpacity, 20, 100) / 100.0f;
+	struct SModule
+	{
+		int m_Enabled, m_X, m_Y, m_Scale;
+	};
+	const SModule aModules[] = {
+		{g_Config.m_PrismHudHotkeys, g_Config.m_PrismHudHotkeysX, g_Config.m_PrismHudHotkeysY, g_Config.m_PrismHudHotkeysScale},
+		{g_Config.m_PrismHudIdentity, g_Config.m_PrismHudIdentityX, g_Config.m_PrismHudIdentityY, g_Config.m_PrismHudIdentityScale},
+		{g_Config.m_PrismHudPerformance, g_Config.m_PrismHudPerformanceX, g_Config.m_PrismHudPerformanceY, g_Config.m_PrismHudPerformanceScale},
+		{g_Config.m_PrismHudDummy, g_Config.m_PrismHudDummyX, g_Config.m_PrismHudDummyY, g_Config.m_PrismHudDummyScale},
+		{g_Config.m_PrismHudStaff, g_Config.m_PrismHudStaffX, g_Config.m_PrismHudStaffY, g_Config.m_PrismHudStaffScale},
+		{g_Config.m_PrismHudInput, g_Config.m_PrismHudInputX, g_Config.m_PrismHudInputY, g_Config.m_PrismHudInputScale},
+		{g_Config.m_PrismHudEffects, g_Config.m_PrismHudEffectsX, g_Config.m_PrismHudEffectsY, g_Config.m_PrismHudEffectsScale},
+	};
+	const ColorRGBA Accent(1.0f, 0.54f, 0.067f, Opacity);
+	for(int Module = 0; Module < PrismQol::NUM_HUD_MODULES; ++Module)
+	{
+		if(!aModules[Module].m_Enabled)
+			continue;
+		float Width, Height;
+		PrismQol::HudModuleExtent(Module, g_Config.m_PrismHudScale, aModules[Module].m_Scale,
+			g_Config.m_PrismHudPadding, g_Config.m_PrismHudFontSize, g_Config.m_PrismInputKeySize, Width, Height);
+		// Even the largest module at maximum scale stays entirely visible at narrow aspects.
+		const float Fit = std::min({1.0f, m_Width / std::max(Width, 1.0f), m_Height / std::max(Height, 1.0f)});
+		Width *= Fit;
+		Height *= Fit;
+		const float Scale = std::clamp(g_Config.m_PrismHudScale, 65, 150) * std::clamp(aModules[Module].m_Scale, 65, 150) / 10000.0f * Fit;
+		const float Font = std::clamp(g_Config.m_PrismHudFontSize, 5, 12) * Scale;
+		const float RowHeight = Font + 4.0f * Scale;
+		const float Pad = std::clamp(g_Config.m_PrismHudPadding, 0, 16) * Scale;
+		const float X = PrismQol::HudCoordinate(aModules[Module].m_X, m_Width, Width);
+		const float Y = PrismQol::HudCoordinate(aModules[Module].m_Y, m_Height, Height);
+		if(g_Config.m_PrismHudBackground)
+		{
+			Graphics()->DrawRect(X, Y, Width, Height, ColorRGBA(0.09f, 0.098f, 0.106f, Opacity), IGraphics::CORNER_ALL,
+				std::min(std::clamp(g_Config.m_PrismHudRounding, 0, 12) * Scale, Height / 2.0f));
+			Graphics()->DrawRect(X + Pad, Y + Pad + RowHeight - Scale, std::max(1.0f, Width - Pad * 2.0f), Scale,
+				ColorRGBA(1.0f, 0.54f, 0.067f, Opacity * 0.3f), 0, 0.0f);
+		}
+		auto Text = [&](int Row, const char *pText, bool Heading = false) {
+			TextRender()->TextColor(Heading ? Accent : ColorRGBA(0.94f, 0.94f, 0.95f, Opacity));
+			TextRender()->Text(X + Pad, Y + Pad + RowHeight * Row, Font, pText, std::max(1.0f, Width - 2.0f * Pad));
+		};
+		auto Pair = [&](int Row, const char *pName, const char *pKey) {
+			const float KeyWidth = TextRender()->TextWidth(Font, pKey);
+			TextRender()->TextColor(0.94f, 0.94f, 0.95f, Opacity);
+			TextRender()->Text(X + Pad, Y + Pad + RowHeight * Row, Font, pName, std::max(1.0f, Width - Pad * 2.0f - KeyWidth - 5.0f * Scale));
+			TextRender()->TextColor(Accent);
+			TextRender()->Text(X + Width - Pad - KeyWidth, Y + Pad + RowHeight * Row, Font, pKey, -1.0f);
+		};
+		char aText[192];
+		switch(Module)
+		{
+		case PrismQol::HUD_HOTKEYS:
+		{
+			Text(0, "Keybinds", true);
+			int Row = 1;
+			if(g_Config.m_PrismDoubleEnabled)
+				Pair(Row++, "Double Tee", g_Config.m_PrismDoubleBind ? Input()->KeyName(g_Config.m_PrismDoubleBind) : "unbound");
+			const int aBinds[] = {g_Config.m_PrismMacro1Bind, g_Config.m_PrismMacro2Bind, g_Config.m_PrismMacro3Bind, g_Config.m_PrismMacro4Bind};
+			for(int i = 0; i < PrismQol::NUM_MACROS; ++i)
+			{
+				if(!GameClient()->m_PrismMacros.Running(i))
+					continue;
+				str_format(aText, sizeof(aText), "Macro %d", i + 1);
+				Pair(Row++, aText, aBinds[i] ? Input()->KeyName(aBinds[i]) : "unbound");
+			}
+			if(Row == 1)
+				Text(1, "No active keybinds");
+			break;
+		}
+		case PrismQol::HUD_IDENTITY:
+			Text(0, "PRISM  /  " PRISM_VERSION, true);
+			break;
+		case PrismQol::HUD_PERFORMANCE:
+		{
+			str_format(aText, sizeof(aText), "%.0f FPS  /  %.2f ms", 1.0f / std::max(0.00001f, Client()->FrameTimeAverage()), Client()->FrameTimeAverage() * 1000.0f);
+			Text(0, aText, true);
+			const int Id = GameClient()->m_aLocalIds[g_Config.m_ClDummy];
+			if(Id >= 0 && Id < MAX_CLIENTS && GameClient()->m_Snap.m_apPlayerInfos[Id])
+				str_format(aText, sizeof(aText), "Ping  %d ms", GameClient()->m_Snap.m_apPlayerInfos[Id]->m_Latency);
+			else
+				str_copy(aText, "Ping unavailable");
+			Text(1, aText);
+			break;
+		}
+		case PrismQol::HUD_DUMMY:
+			Text(0, "Double Tee", true);
+			str_format(aText, sizeof(aText), "%s / assistant %s", Client()->DummyConnected() ? "connected" : "offline", g_Config.m_PrismDoubleEnabled ? "ON" : "OFF");
+			Text(1, aText);
+			break;
+		case PrismQol::HUD_STAFF:
+		{
+			int Verified = 0;
+			const char *pVerifiedName = nullptr;
+			for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+			{
+				if(GameClient()->m_aClients[Id].m_Active && GameClient()->m_aClients[Id].m_AuthLevel > 0 && GameClient()->m_Snap.m_apPlayerInfos[Id])
+				{
+					++Verified;
+					if(!pVerifiedName)
+						pVerifiedName = GameClient()->m_aClients[Id].m_aName;
+				}
+			}
+			str_format(aText, sizeof(aText), "Verified staff  %d", Verified);
+			Text(0, aText, true);
+			Text(1, pVerifiedName ? pVerifiedName : "No server-verified status");
+			break;
+		}
+		case PrismQol::HUD_INPUT:
+		{
+			Text(0, "Input / aim", true);
+			const int64_t Now = time_get();
+			if(m_PrismBindRefresh == 0 || Now - m_PrismBindRefresh >= time_freq())
+			{
+				const char *apCommands[] = {"+left", "+jump", "+right", "+fire", "+hook"};
+				for(int Key = 0; Key < 5; ++Key)
+				{
+					GameClient()->m_Binds.GetKey(apCommands[Key], m_aaPrismInputLabels[Key], sizeof(m_aaPrismInputLabels[Key]));
+					if(!m_aaPrismInputLabels[Key][0])
+						str_copy(m_aaPrismInputLabels[Key], "--");
+				}
+				m_PrismBindRefresh = Now;
+			}
+			const auto &Controls = GameClient()->m_Controls;
+			const auto &State = Controls.m_aPrismLastOutput[g_Config.m_ClDummy];
+			const bool aPressed[] = {State.m_Direction < 0, State.m_Jump != 0, State.m_Direction > 0, (State.m_Fire & 1) != 0, State.m_Hook != 0};
+			const char *apActions[] = {"Left", "Jump", "Right", "Fire", "Hook"};
+			const float KeySize = std::clamp(g_Config.m_PrismInputKeySize, 12, 32) * Scale;
+			const float Gap = 2.0f * Scale;
+			const ColorRGBA Active = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismInputActiveColor, true));
+			const ColorRGBA Inactive = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismInputInactiveColor, true));
+			for(int Key = 0; Key < 5; ++Key)
+			{
+				const float Target = aPressed[Key] ? 1.0f : 0.0f;
+				const float Delta = std::clamp(Client()->FrameTime() / 0.14f, 0.0f, 1.0f);
+				m_aPrismInputFade[Key] = g_Config.m_PrismInputAnimation && !g_Config.m_PrismReducedMotion ?
+					m_aPrismInputFade[Key] + (Target - m_aPrismInputFade[Key]) * Delta : Target;
+				ColorRGBA Fill = mix(Inactive, Active, m_aPrismInputFade[Key]);
+				Fill.a *= Opacity;
+				const int Col = Key < 3 ? Key : (Key == 3 ? 0 : 2);
+				const int Row = Key < 3 ? 0 : 1;
+				const float KeyX = X + Pad + Col * (KeySize + Gap);
+				const float KeyY = Y + Pad + RowHeight + Row * (KeySize + Gap);
+				Graphics()->DrawRect(KeyX, KeyY, KeySize, KeySize, Fill, IGraphics::CORNER_ALL,
+					std::min(std::clamp(g_Config.m_PrismInputRounding, 0, 12) * Scale, KeySize / 2.0f));
+				const char *pLabel = g_Config.m_PrismInputLabels ? apActions[Key] : m_aaPrismInputLabels[Key];
+				const float LabelWidth = TextRender()->TextWidth(Font, pLabel);
+				const float LabelFont = Font * std::min(1.0f, (KeySize - Scale * 2.0f) / std::max(1.0f, LabelWidth));
+				TextRender()->TextColor(aPressed[Key] ? ColorRGBA(0.06f, 0.06f, 0.07f, Opacity) : ColorRGBA(0.95f, 0.95f, 0.95f, Opacity));
+				TextRender()->Text(KeyX + (KeySize - TextRender()->TextWidth(LabelFont, pLabel)) / 2.0f,
+					KeyY + (KeySize - LabelFont) / 2.0f, LabelFont, pLabel, -1.0f);
+			}
+			const vec2 Center(X + Pad + KeySize * 1.5f + Gap, Y + Pad + RowHeight + KeySize * 1.5f + Gap);
+			vec2 Aim = Controls.m_aMousePos[g_Config.m_ClDummy];
+			const float AimLength = length(Aim);
+			Aim = AimLength > 0.001f ? Aim / AimLength : vec2(1.0f, 0.0f);
+			const float Radius = KeySize * 0.35f;
+			Graphics()->TextureClear();
+			Graphics()->LinesBegin();
+			Graphics()->SetColor(1.0f, 1.0f, 1.0f, Opacity * 0.2f);
+			IGraphics::CLineItem aCross[] = {{Center.x - Radius, Center.y, Center.x + Radius, Center.y}, {Center.x, Center.y - Radius, Center.x, Center.y + Radius}};
+			Graphics()->LinesDraw(aCross, 2);
+			Graphics()->SetColor(Accent);
+			const vec2 Tip = Center + Aim * Radius;
+			IGraphics::CLineItem Direction(Center.x, Center.y, Tip.x, Tip.y);
+			Graphics()->LinesDraw(&Direction, 1);
+			Graphics()->LinesEnd();
+			Graphics()->DrawRect(Tip.x - Scale, Tip.y - Scale, 2.0f * Scale, 2.0f * Scale, Accent, IGraphics::CORNER_ALL, Scale);
+			break;
+		}
+		case PrismQol::HUD_EFFECTS:
+		{
+			Text(0, "Effects", true);
+			int Row = 1;
+			if(g_Config.m_PrismEnabled)
+			{
+				if(g_Config.m_PrismLocalOutline || g_Config.m_PrismOtherOutline) Text(Row++, "Tee outline");
+				if(g_Config.m_PrismLocalGlow || g_Config.m_PrismOtherGlow) Text(Row++, "Tee glow");
+				if(g_Config.m_PrismLocalHook || g_Config.m_PrismOtherHook) Text(Row++, "Hook tint");
+				if(g_Config.m_PrismHookEffect) Text(Row++, "Hook effects");
+				if(g_Config.m_PrismTrail) Text(Row++, "Player trails");
+				if(g_Config.m_PrismHighlight) Text(Row++, "Player highlight");
+			}
+			if(Row == 1) Text(1, "No active effects");
+			break;
+		}
+		}
+	}
+	TextRender()->TextColor(TextRender()->DefaultTextColor());
 }

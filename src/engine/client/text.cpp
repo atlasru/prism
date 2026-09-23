@@ -18,6 +18,7 @@
 #include FT_FREETYPE_H
 
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 #include <tuple>
@@ -327,6 +328,9 @@ private:
 	// Font faces
 	FT_Face m_DefaultFace = nullptr;
 	FT_Face m_IconFace = nullptr;
+	FT_Face m_PrismBodyFace = nullptr;
+	FT_Face m_PrismBodyBoldFace = nullptr;
+	FT_Face m_PrismHeadingFace = nullptr;
 	FT_Face m_VariantFace = nullptr;
 	FT_Face m_SelectedFace = nullptr;
 	std::vector<FT_Face> m_vFallbackFaces;
@@ -681,6 +685,14 @@ public:
 		return true;
 	}
 
+	bool SetPrismFacesByName(const char *pBody, const char *pBodyBold, const char *pHeading)
+	{
+		m_PrismBodyFace = GetFaceByName(pBody);
+		m_PrismBodyBoldFace = GetFaceByName(pBodyBold);
+		m_PrismHeadingFace = GetFaceByName(pHeading);
+		return m_PrismBodyFace && m_PrismBodyBoldFace && m_PrismHeadingFace;
+	}
+
 	void SetFontPreset(EFontPreset FontPreset)
 	{
 		switch(FontPreset)
@@ -690,6 +702,15 @@ public:
 			break;
 		case EFontPreset::ICON_FONT:
 			m_SelectedFace = m_IconFace;
+			break;
+		case EFontPreset::PRISM_BODY:
+			m_SelectedFace = m_PrismBodyFace;
+			break;
+		case EFontPreset::PRISM_BODY_BOLD:
+			m_SelectedFace = m_PrismBodyBoldFace;
+			break;
+		case EFontPreset::PRISM_HEADING:
+			m_SelectedFace = m_PrismHeadingFace;
 			break;
 		}
 	}
@@ -965,6 +986,7 @@ class CTextRender : public IEngineTextRender
 	std::vector<SFontLanguageVariant> m_vVariants;
 
 	unsigned m_RenderFlags;
+	float m_TextScaleX = 1.0f;
 
 	ColorRGBA m_Color;
 	ColorRGBA m_OutlineColor;
@@ -1327,6 +1349,17 @@ public:
 			Success = false;
 		}
 
+		// Optional to retain compatibility with user-provided DDNet font indices.
+		// Missing glyphs still use the default/language/fallback face chain.
+		const json_value &PrismBody = (*pJsonData)["prism body"];
+		const json_value &PrismBodyBold = (*pJsonData)["prism body bold"];
+		const json_value &PrismHeading = (*pJsonData)["prism heading"];
+		if(PrismBody.type == json_string && PrismBodyBold.type == json_string && PrismHeading.type == json_string)
+		{
+			if(!m_pGlyphMap->SetPrismFacesByName(PrismBody.u.string.ptr, PrismBodyBold.u.string.ptr, PrismHeading.u.string.ptr))
+				log_warn("textrender", "Prism font faces unavailable; using default font fallback");
+		}
+
 		json_value_free(pJsonData);
 		return Success;
 	}
@@ -1334,6 +1367,16 @@ public:
 	void SetFontPreset(EFontPreset FontPreset) override
 	{
 		m_pGlyphMap->SetFontPreset(FontPreset);
+	}
+
+	void SetTextScaleX(float ScaleX) override
+	{
+		m_TextScaleX = std::isfinite(ScaleX) ? std::clamp(ScaleX, 1.0f, 1.4f) : 1.0f;
+	}
+
+	float GetTextScaleX() const override
+	{
+		return m_TextScaleX;
 	}
 
 	void SetFontLanguageVariant(const char *pLanguageFile) override
@@ -1734,13 +1777,13 @@ public:
 					const float Scale = 1.0f / pGlyph->m_FontSize;
 
 					const bool ApplyBearingX = !(((RenderFlags & TEXT_RENDER_FLAG_NO_X_BEARING) != 0) || (pCursor->m_GlyphCount == 0 && (RenderFlags & TEXT_RENDER_FLAG_NO_FIRST_CHARACTER_X_BEARING) != 0));
-					const float Advance = (((RenderFlags & TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH) != 0) ? (pGlyph->m_Width) : (pGlyph->m_AdvanceX + ((!ApplyBearingX) ? (-pGlyph->m_OffsetX) : 0.f))) * Scale * pCursor->m_AlignedFontSize;
+					const float Advance = (((RenderFlags & TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH) != 0) ? (pGlyph->m_Width) : (pGlyph->m_AdvanceX + ((!ApplyBearingX) ? (-pGlyph->m_OffsetX) : 0.f))) * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 
-					const float OutLineRealDiff = (pGlyph->m_Width - pGlyph->m_CharWidth) * Scale * pCursor->m_AlignedFontSize;
+					const float OutLineRealDiff = (pGlyph->m_Width - pGlyph->m_CharWidth) * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 
 					float CharKerning = 0.0f;
 					if((RenderFlags & TEXT_RENDER_FLAG_KERNING) != 0)
-						CharKerning = m_pGlyphMap->Kerning(pLastGlyph, pGlyph).x * Scale * pCursor->m_AlignedFontSize;
+						CharKerning = m_pGlyphMap->Kerning(pLastGlyph, pGlyph).x * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 					pLastGlyph = pGlyph;
 
 					if((pCursor->m_Flags & TEXTFLAG_ELLIPSIS_AT_END) != 0 && pCursor->m_LineWidth > 0.0f && pCurrent < pBatchEnd && pCurrent != pEllipsis)
@@ -1758,11 +1801,11 @@ public:
 						}
 						if(pEllipsisGlyph != nullptr)
 						{
-							float AdvanceEllipsis = (((RenderFlags & TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH) != 0) ? (pEllipsisGlyph->m_Width) : (pEllipsisGlyph->m_AdvanceX + ((!ApplyBearingX) ? (-pEllipsisGlyph->m_OffsetX) : 0.f))) * Scale * pCursor->m_AlignedFontSize;
+							float AdvanceEllipsis = (((RenderFlags & TEXT_RENDER_FLAG_ONLY_ADVANCE_WIDTH) != 0) ? (pEllipsisGlyph->m_Width) : (pEllipsisGlyph->m_AdvanceX + ((!ApplyBearingX) ? (-pEllipsisGlyph->m_OffsetX) : 0.f))) * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 							float CharKerningEllipsis = 0.0f;
 							if((RenderFlags & TEXT_RENDER_FLAG_KERNING) != 0)
 							{
-								CharKerningEllipsis = m_pGlyphMap->Kerning(pGlyph, pEllipsisGlyph).x * Scale * pCursor->m_AlignedFontSize;
+								CharKerningEllipsis = m_pGlyphMap->Kerning(pGlyph, pEllipsisGlyph).x * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 							}
 							if(DrawX + CharKerning + Advance + CharKerningEllipsis + AdvanceEllipsis - pCursor->m_StartX > pCursor->m_LineWidth)
 							{
@@ -1794,8 +1837,8 @@ public:
 						break;
 					}
 
-					float BearingX = (!ApplyBearingX ? 0.f : pGlyph->m_OffsetX) * Scale * pCursor->m_AlignedFontSize;
-					float CharWidth = pGlyph->m_Width * Scale * pCursor->m_AlignedFontSize;
+					float BearingX = (!ApplyBearingX ? 0.f : pGlyph->m_OffsetX) * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
+					float CharWidth = pGlyph->m_Width * Scale * pCursor->m_AlignedFontSize * m_TextScaleX;
 
 					float BearingY = (((RenderFlags & TEXT_RENDER_FLAG_NO_Y_BEARING) != 0) ? 0.f : (pGlyph->m_OffsetY * Scale * pCursor->m_AlignedFontSize));
 					float CharHeight = pGlyph->m_Height * Scale * pCursor->m_AlignedFontSize;

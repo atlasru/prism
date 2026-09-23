@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -255,11 +256,68 @@ public:
 // Normalized coordinates use [0,10000], independent of current pixel resolution.
 inline float HudCoordinate(int Normalized, float Extent, float ElementExtent)
 {
-	return std::clamp(Normalized / 10000.0f * Extent, 0.0f, std::max(0.0f, Extent - ElementExtent));
+	if(!std::isfinite(Extent) || !std::isfinite(ElementExtent) || Extent <= 0.0f)
+		return 0.0f;
+	return std::clamp(std::clamp(Normalized, 0, 10000) / 10000.0f * Extent, 0.0f, std::max(0.0f, Extent - std::max(0.0f, ElementExtent)));
 }
 inline int HudNormalize(float Position, float Extent)
 {
-	return Extent > 0 ? std::clamp((int)(Position / Extent * 10000.0f + 0.5f), 0, 10000) : 0;
+	if(!std::isfinite(Position) || !std::isfinite(Extent) || Extent <= 0.0f)
+		return 0;
+	return (int)(std::clamp(Position / Extent, 0.0f, 1.0f) * 10000.0f + 0.5f);
+}
+
+static constexpr int NUM_HUD_MODULES = 7;
+enum EHudModule { HUD_HOTKEYS, HUD_IDENTITY, HUD_PERFORMANCE, HUD_DUMMY, HUD_STAFF, HUD_INPUT, HUD_EFFECTS };
+enum EHudPreset { HUD_MINIMAL, HUD_STREAMING, HUD_COMPETITIVE, HUD_CUSTOM };
+struct SHudPreset
+{
+	std::array<int, NUM_HUD_MODULES> m_aEnabled{};
+	std::array<int, NUM_HUD_MODULES> m_aX{{300, 300, 8200, 300, 8200, 300, 7600}};
+	std::array<int, NUM_HUD_MODULES> m_aY{{900, 250, 250, 3200, 1800, 7500, 1800}};
+};
+inline SHudPreset HudPreset(int Preset)
+{
+	SHudPreset Result;
+	if(Preset == HUD_MINIMAL)
+		Result.m_aEnabled = {{0, 1, 0, 0, 0, 0, 0}};
+	else if(Preset == HUD_STREAMING)
+		Result.m_aEnabled = {{1, 1, 0, 1, 0, 1, 1}};
+	else if(Preset == HUD_COMPETITIVE)
+		Result.m_aEnabled = {{1, 1, 1, 1, 0, 1, 0}};
+	else
+		Result.m_aEnabled = {{1, 1, 0, 1, 0, 0, 0}};
+	return Result;
+}
+// Snap leading/trailing edges and the center. Caller may also align to other
+// widgets with the same threshold. All values are in the caller's canvas units.
+inline float HudSnap(float Position, float Extent, float ElementExtent, float Threshold = 4.0f)
+{
+	if(!std::isfinite(Position) || !std::isfinite(Extent) || !std::isfinite(ElementExtent))
+		return 0.0f;
+	const float End = std::max(0.0f, Extent - std::max(0.0f, ElementExtent));
+	Position = std::clamp(Position, 0.0f, End);
+	const float aTargets[] = {0.0f, End / 2.0f, End};
+	for(float Target : aTargets)
+		if(std::abs(Position - Target) <= std::max(0.0f, Threshold))
+			return Target;
+	return Position;
+}
+// Shared bounds for the in-game HUD and editor. Dimensions are DDNet HUD units
+// (height 300), not pixels. Uniform downscaling to a smaller canvas is external.
+inline void HudModuleExtent(int Module, int GlobalScale, int ModuleScale, int Padding, int FontSize, int KeySize, float &Width, float &Height)
+{
+	const float Scale = std::clamp(GlobalScale, 65, 150) * std::clamp(ModuleScale, 65, 150) / 10000.0f;
+	const float Pad = (float)std::clamp(Padding, 0, 16);
+	const float Font = (float)std::clamp(FontSize, 5, 12);
+	const float Row = Font + 4.0f;
+	const float Key = (float)std::clamp(KeySize, 12, 32);
+	const int aRows[NUM_HUD_MODULES] = {6, 1, 2, 2, 2, 0, 7};
+	Module = std::clamp(Module, 0, NUM_HUD_MODULES - 1);
+	Width = (Module == HUD_INPUT ? Key * 3.0f + 4.0f : Font * (Module == HUD_IDENTITY ? 19.0f : 24.0f)) + Pad * 2.0f;
+	Height = Module == HUD_INPUT ? Key * 2.0f + 2.0f + Row + Pad * 2.0f : Row * aRows[Module] + Pad * 2.0f;
+	Width *= Scale;
+	Height *= Scale;
 }
 }
 #endif

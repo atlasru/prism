@@ -173,14 +173,10 @@ public:
 	CControls m_Controls;
 	// Phase 3: only client-side input composition, never prediction/physics/protocol.
 	PrismQol::CMacroEngine m_PrismMacros;
-	bool m_PrismMacroFireOwned = false;
-	int m_PrismMacroFireCounter = 0;
-	int m_PrismMacroLastManualFire = 0;
-	bool m_PrismDummyFireOwned = false;
-	bool m_PrismLastAssisted = false;
-	int m_PrismDummyFire = 0;
+	bool m_aPrismLastAssisted[NUM_DUMMIES] = {};
 	int m_PrismHammerCounter = 0;
 	void PrismEmergencyStop();
+	bool PrismInputAllowed();
 	CEffects m_Effects;
 	CScoreboard m_Scoreboard;
 	CStatboard m_Statboard;

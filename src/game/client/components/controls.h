@@ -11,6 +11,7 @@
 #include <generated/protocol.h>
 
 #include <game/client/component.h>
+#include <game/client/prism_input.h>
 
 class CControls : public CComponent
 {
@@ -37,6 +38,7 @@ public:
 	CNetObj_PlayerInput m_aInputData[NUM_DUMMIES];
 	CNetObj_PlayerInput m_aLastData[NUM_DUMMIES];
 	CNetObj_PlayerInput m_aPrismLastOutput[NUM_DUMMIES] = {};
+	PrismInput::CFireComposer m_aPrismFire[NUM_DUMMIES];
 	int m_aInputDirectionLeft[NUM_DUMMIES];
 	int m_aInputDirectionRight[NUM_DUMMIES];
 	int m_aShowHookColl[NUM_DUMMIES];

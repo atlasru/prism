@@ -1,0 +1,32 @@
+Prism typography assets
+
+Unbounded ExtraBold (weight 800): Copyright 2022 The Unbounded Project Authors
+Manrope Medium (weight 500), SemiBold (weight 600): Copyright 2018 The Manrope Project Authors
+
+License: SIL Open Font License 1.1. Complete upstream notices accompany the
+fonts in Unbounded-LICENSE.txt and Manrope-LICENSE.txt. Neither supplied
+license declares a Reserved Font Name. These fonts remain under OFL-1.1,
+independently of the client code license.
+
+Authoritative distribution, retrieved 2026-09-22:
+https://github.com/google/fonts/tree/main/ofl/unbounded
+https://github.com/google/fonts/tree/main/ofl/manrope
+
+Source variable font SHA-256:
+Unbounded[wght].ttf
+323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f
+Manrope[wght].ttf
+3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6
+
+Static instances generated with fontTools 4.61.1, no subsetting:
+instantiateVariableFont(TTFont(source), {"wght": weight},
+                        inplace=True, updateFontNames=True).save(destination)
+
+All 66 Russian Cyrillic letters, including capital/lowercase Yo, are present
+in all three bundled faces. The renderer retains DDNet's existing fallback
+chain for other missing glyphs. Default DDNet text remains DejaVu Sans.
+
+Prism headings apply X scale to glyph quad width, horizontal bearing,
+advance, kerning and ellipsis metrics. Vertical dimensions and glyph UVs
+are unchanged. This is actual glyph stretching, not tracking. UI callers
+restore scale 1.0 and the default font after rendering the Prism overlay.

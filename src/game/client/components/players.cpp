@@ -4,6 +4,8 @@
 
 #include "players.h"
 
+#include <game/client/prism_effects_render.h>
+
 #include <base/color.h>
 #include <base/dbg.h>
 #include <base/math.h>
@@ -532,6 +534,9 @@ void CPlayers::RenderHook(
 		(Pos.y > ScreenRect.m_BottomRight.y && HookPos.y > ScreenRect.m_BottomRight.y))
 		return;
 
+	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1))
+		RenderPrismHook(ClientId, Position, HookPos, Alpha, ClientId == GameClient()->m_Snap.m_LocalClientId);
+
 	float d = distance(Pos, HookPos);
 	vec2 Dir = normalize(Pos - HookPos);
 
@@ -622,6 +627,8 @@ void CPlayers::RenderPlayer(
 	float Alpha = (OtherTeam || ClientId < 0) ? g_Config.m_ClShowOthersAlpha / 100.0f : 1.0f;
 	if(ClientId == -2) // ghost
 		Alpha = g_Config.m_ClRaceGhostAlpha / 100.0f;
+	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1))
+		RenderPrismPlayer(ClientId, Position, Alpha, Local);
 	// TODO: snd_game_volume_others
 	const float Volume = 1.0f;
 
@@ -983,7 +990,37 @@ inline bool CPlayers::IsPlayerInfoAvailable(int ClientId) const
 void CPlayers::OnRender()
 {
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
+	{
+		OnReset();
 		return;
+	}
+
+	const int Tick = Client()->GameTick(g_Config.m_ClDummy);
+	if(!g_Config.m_PrismEnabled || Tick < m_PrismLastTick)
+		OnReset();
+	m_PrismLastTick = Tick;
+	m_PrismDt = GameClient()->IsWorldPaused() || GameClient()->IsDemoPlaybackPaused() ? 0.0f : std::clamp(Client()->RenderFrameTime(), 0.0f, 0.1f);
+	m_PrismTime += m_PrismDt;
+	m_PrismParticles.Advance(m_PrismDt, std::min(g_Config.m_PrismHookParticleCap, PrismEffects::QualityParticleLimit(g_Config.m_PrismEffectQuality)));
+	for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+	{
+		auto &Owner = m_aPrismOwners[Id];
+		Owner.m_TeeSeen = Owner.m_HookSeen = false;
+		if(!IsPlayerInfoAvailable(Id))
+		{
+			Owner = CPrismOwner{};
+			m_PrismParticles.ClearOwner(Id);
+			continue;
+		}
+		const vec2 Position = GameClient()->m_aClients[Id].m_RenderPos;
+		if(Owner.m_PositionValid && distance(Position, Owner.m_LastPosition) > PrismEffects::TELEPORT_DISTANCE)
+		{
+			Owner = CPrismOwner{};
+			m_PrismParticles.ClearOwner(Id);
+		}
+		Owner.m_LastPosition = Position;
+		Owner.m_PositionValid = true;
+	}
 
 	// update render info for ninja
 	CTeeRenderInfo aRenderInfo[MAX_CLIENTS];
@@ -1095,6 +1132,19 @@ void CPlayers::OnRender()
 		RenderHookCollLine(ScreenRect, &pClientData->m_RenderPrev, &pClientData->m_RenderCur, RenderLastId);
 		RenderPlayer(ScreenRect, &pClientData->m_RenderPrev, &pClientData->m_RenderCur, &aRenderInfo[RenderLastId], RenderLastId);
 	}
+	// Hidden, absent, filtered or retracted owners never retain a cosmetic history.
+	for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+	{
+		auto &Owner = m_aPrismOwners[Id];
+		if(!Owner.m_TeeSeen)
+			Owner.m_Trail.Reset();
+		if(!Owner.m_HookSeen)
+		{
+			Owner.m_HookValid = false;
+			Owner.m_SpawnCredit = 0;
+			m_PrismParticles.ClearOwner(Id);
+		}
+	}
 }
 
 void CPlayers::CreateNinjaTeeRenderInfo()
@@ -1195,3 +1245,137 @@ void CPlayers::OnInit()
 	CreateSpectatorTeeRenderInfo();
 }
 
+
+void CPlayers::OnReset()
+{
+	m_PrismParticles.Reset();
+	for(auto &Owner : m_aPrismOwners)
+		Owner = CPrismOwner{};
+	m_PrismTime = 0;
+	m_PrismDt = 0;
+	m_PrismLastTick = -1;
+}
+
+void CPlayers::OnStateChange(int NewState, int OldState)
+{
+	OnReset();
+}
+
+float CPlayers::PrismRandom()
+{
+	// Cosmetic-only deterministic PRNG. Never perturb DDNet's global random sequence.
+	m_PrismRandom ^= m_PrismRandom << 13;
+	m_PrismRandom ^= m_PrismRandom >> 17;
+	m_PrismRandom ^= m_PrismRandom << 5;
+	return (m_PrismRandom & 0xffffff) / 16777216.0f;
+}
+
+void CPlayers::RenderPrismHook(int ClientId, vec2 Position, vec2 HookPosition, float Alpha, bool Local)
+{
+	if(Alpha <= 0 || g_Config.m_PrismHookEffect == 0 || !(Local ? g_Config.m_PrismHookEffectLocal : g_Config.m_PrismHookEffectOthers))
+		return;
+	auto &Owner = m_aPrismOwners[ClientId];
+	Owner.m_HookSeen = true;
+	if(Owner.m_HookValid && distance(HookPosition, Owner.m_LastHookPosition) > PrismEffects::TELEPORT_DISTANCE)
+	{
+		m_PrismParticles.ClearOwner(ClientId);
+		Owner.m_SpawnCredit = 0;
+	}
+	Owner.m_LastHookPosition = HookPosition;
+	Owner.m_HookValid = true;
+	const ColorRGBA Color = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismHookParticleColor)).WithAlpha(Alpha * g_Config.m_PrismHookParticleOpacity / 100.0f);
+	const int Mode = g_Config.m_PrismHookEffect;
+	const int Limit = std::min(g_Config.m_PrismHookParticleCap, PrismEffects::QualityParticleLimit(g_Config.m_PrismEffectQuality));
+	if(Mode < 4 && m_PrismDt > 0)
+	{
+		Owner.m_SpawnCredit = std::min(Owner.m_SpawnCredit + m_PrismDt * g_Config.m_PrismHookParticleRate, 12.0f);
+		const vec2 Delta = HookPosition - Position;
+		const vec2 Normal = length(Delta) > 0.001f ? vec2(-Delta.y, Delta.x) / length(Delta) : vec2(0, 1);
+		while(Owner.m_SpawnCredit >= 1)
+		{
+			Owner.m_SpawnCredit -= 1;
+			PrismEffects::CParticle Particle;
+			Particle.m_Owner = ClientId;
+			Particle.m_Position = mix(Position, HookPosition, PrismRandom()) + Normal * ((PrismRandom() * 2 - 1) * g_Config.m_PrismHookParticleSpread);
+			Particle.m_Phase = PrismRandom() * 2 * pi;
+			Particle.m_Velocity = direction(Particle.m_Phase) * (g_Config.m_PrismHookParticleSpeed * (0.3f + PrismRandom() * 0.7f));
+			Particle.m_Lifetime = g_Config.m_PrismHookParticleLifetime / 1000.0f;
+			if(!m_PrismParticles.Spawn(Particle, Limit))
+			{
+				Owner.m_SpawnCredit = 0;
+				break;
+			}
+		}
+	}
+	Graphics()->TextureClear();
+	Graphics()->QuadsBegin();
+	Graphics()->QuadsSetRotation(0);
+	const float Pulse = 0.5f + 0.5f * std::sin(static_cast<float>(m_PrismTime) * 2 * pi * g_Config.m_PrismHookPulseFrequency / 10.0f);
+	const float Intensity = g_Config.m_PrismHookPulseIntensity / 100.0f;
+	if(Intensity > 0)
+		PrismEffects::QuadSegment(Graphics(), Position, HookPosition, 2 + Pulse * 8 * Intensity, Color.WithAlpha(Color.a * Pulse * Intensity * 0.45f));
+	if(Mode < 4)
+		for(const auto &Particle : m_PrismParticles.Particles())
+		{
+			if(Particle.m_Owner != ClientId)
+				continue;
+			const float Fade = PrismEffects::Fade(Particle.m_Age, Particle.m_Lifetime, g_Config.m_PrismHookParticleFade);
+			const float Size = g_Config.m_PrismHookParticleSize * (0.6f + 0.4f * Fade);
+			const float Phase = Particle.m_Phase + Particle.m_Age;
+			if(g_Config.m_PrismHookParticleGlow && g_Config.m_PrismEffectQuality > 0)
+				PrismEffects::QuadParticle(Graphics(), Particle.m_Position, Mode, Size * 1.6f, Phase, Color.WithAlpha(Color.a * Fade * 0.12f));
+			PrismEffects::QuadParticle(Graphics(), Particle.m_Position, Mode, Size, Phase, Color.WithAlpha(Color.a * Fade));
+		}
+	Graphics()->QuadsEnd();
+	Graphics()->SetColor(1, 1, 1, 1);
+}
+
+void CPlayers::RenderPrismPlayer(int ClientId, vec2 Position, float Alpha, bool Local)
+{
+	if(Alpha <= 0)
+		return;
+	auto &Owner = m_aPrismOwners[ClientId];
+	if(g_Config.m_PrismTrail && (Local ? g_Config.m_PrismTrailLocal : g_Config.m_PrismTrailOthers))
+	{
+		Owner.m_TeeSeen = true;
+		const float Lifetime = g_Config.m_PrismTrailLength / 1000.0f;
+		const float Interval = std::max(g_Config.m_PrismTrailInterval / 1000.0f, g_Config.m_PrismEffectQuality == 0 ? 0.04f : 0.008f);
+		Owner.m_Trail.Add(Position, m_PrismTime, Interval, Lifetime);
+		const auto &Trail = Owner.m_Trail;
+		const ColorRGBA Color = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismTrailColor)).WithAlpha(Alpha * g_Config.m_PrismTrailOpacity / 100.0f);
+		auto SamplePosition = [&](int Index) {
+			const vec2 P = Trail.Sample(Index).m_Position;
+			if(!g_Config.m_PrismTrailSmoothing || Index == 0 || Index + 1 >= Trail.Count())
+				return P;
+			return (Trail.Sample(Index - 1).m_Position + P * 2 + Trail.Sample(Index + 1).m_Position) * 0.25f;
+		};
+		Graphics()->TextureClear();
+		Graphics()->QuadsBegin();
+		Graphics()->QuadsSetRotation(0);
+		for(int i = 0; i < Trail.Count(); ++i)
+		{
+			const float Age = static_cast<float>(m_PrismTime - Trail.Sample(i).m_Time);
+			const float Fade = PrismEffects::Fade(Age, Lifetime, g_Config.m_PrismTrailFade);
+			const vec2 From = SamplePosition(i);
+			const vec2 To = i + 1 < Trail.Count() ? SamplePosition(i + 1) : Position;
+			const float Width = g_Config.m_PrismTrailWidth * (g_Config.m_PrismTrail == 2 ? (0.1f + 1.9f * Fade) : 1.0f);
+			if(g_Config.m_PrismTrail == 3)
+			{
+				if(g_Config.m_PrismTrailGlow && g_Config.m_PrismEffectQuality > 0)
+					PrismEffects::QuadParticle(Graphics(), From, 2, Width, 0, Color.WithAlpha(Color.a * Fade * 0.12f));
+				PrismEffects::QuadParticle(Graphics(), From, 2, Width * 0.5f, 0, Color.WithAlpha(Color.a * Fade));
+			}
+			else
+			{
+				if(g_Config.m_PrismTrailGlow && g_Config.m_PrismEffectQuality > 0)
+					PrismEffects::QuadSegment(Graphics(), From, To, Width * 2, Color.WithAlpha(Color.a * Fade * 0.12f));
+				PrismEffects::QuadSegment(Graphics(), From, To, Width, Color.WithAlpha(Color.a * Fade));
+			}
+		}
+		Graphics()->QuadsEnd();
+		Graphics()->SetColor(1, 1, 1, 1);
+	}
+	if(g_Config.m_PrismHighlight && (Local ? g_Config.m_PrismHighlightLocal : g_Config.m_PrismHighlightOthers))
+		PrismEffects::DrawHighlight(Graphics(), Position, g_Config.m_PrismHighlightScale / 100.0f, g_Config.m_PrismHighlightWidth, g_Config.m_PrismHighlightRounding,
+			color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismHighlightColor)).WithAlpha(Alpha), g_Config.m_PrismHighlightFill / 100.0f, g_Config.m_PrismHighlightOpacity / 100.0f);
+}
