@@ -3,7 +3,6 @@ MACRO_CONFIG_COL(PrismThemeAccent, prism_theme_accent, 1507208, CFGFLAG_CLIENT |
 MACRO_CONFIG_COL(PrismThemeBackground, prism_theme_background, 9770009, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism background color")
 MACRO_CONFIG_COL(PrismThemePanel, prism_theme_panel, 10031651, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism panel color")
 MACRO_CONFIG_COL(PrismThemeText, prism_theme_text, 10037744, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism text color")
-MACRO_CONFIG_INT(PrismThemeSchema, prism_theme_schema, 1, 1, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Theme schema version")
 MACRO_CONFIG_INT(PrismThemeBorder, prism_theme_border, 22, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Panel border opacity percent")
 MACRO_CONFIG_INT(PrismThemeRounding, prism_theme_rounding, 9, 0, 20, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Panel corner radius")
 MACRO_CONFIG_INT(PrismThemeShadow, prism_theme_shadow, 35, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Panel shadow opacity percent")
