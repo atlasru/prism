@@ -2608,6 +2608,15 @@ if(CLIENT)
     lineinput.h
     pickup_data.cpp
     pickup_data.h
+    prism.h
+    prism_effects.h
+    prism_effects_render.h
+    prism_input.h
+    prism_qol.h
+    prism_theme.cpp
+    prism_theme.h
+    prism_ui.h
+    prism_version.h
     prediction/entities/character.cpp
     prediction/entities/character.h
     prediction/entities/door.cpp
@@ -2630,7 +2639,6 @@ if(CLIENT)
     projectile_data.h
     race.cpp
     race.h
-    prism.h
     render.cpp
     render.h
     sixup_translate_connless.cpp
@@ -4086,4 +4094,3 @@ foreach(target ${TARGETS_DEP})
     target_compile_options(${target} PRIVATE ${OUR_FLAGS_DEP})
   endif()
 endforeach()
-
