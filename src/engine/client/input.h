@@ -137,6 +137,7 @@ public:
 
 	bool MouseRelative(float *pX, float *pY) override;
 	void MouseModeAbsolute() override;
+	void SetMenuCursorVisible(bool Visible) override;
 	void MouseModeRelative() override;
 	vec2 NativeMousePos() const override;
 	bool NativeMousePressed(int Index) const override;

@@ -542,6 +542,10 @@ public:
 	void DebugRender(float X, float Y);
 
 	vec2 MousePos() const { return m_MousePos; }
+	void SyncNativeMousePos(vec2 NativePos)
+	{
+		m_UpdatedMousePos = NativePos;
+	}
 	float MouseX() const { return m_MousePos.x; }
 	float MouseY() const { return m_MousePos.y; }
 	vec2 MouseDelta() const { return m_MouseDelta; }

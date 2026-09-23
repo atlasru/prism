@@ -143,6 +143,11 @@ protected:
 	bool m_MenuActive;
 	bool m_PrismOpen = false;
 	float m_PrismTransition = 0.0f;
+	bool m_PrismDragging = false;
+	bool m_PrismSystemCursorActive = false;
+	vec2 m_PrismDragOffset = vec2(0.0f, 0.0f);
+	int m_PrismHudDragIndex = -1;
+	vec2 m_PrismHudDragOffset = vec2(0.0f, 0.0f);
 	int m_PrismCategory = 0;
 	int m_PrismCaptureBind = -1; // -1 none; 0 assistant, 1 emergency stop, 2..5 macros.
 

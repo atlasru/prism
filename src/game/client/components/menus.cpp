@@ -2420,6 +2420,21 @@ void CMenus::OnRender()
 {
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 		SetActive(true);
+	bool UseSystemCursor = false;
+#if defined(CONF_FAMILY_WINDOWS)
+	UseSystemCursor = g_Config.m_PrismMenuCursor && (m_MenuActive || m_PrismOpen);
+#endif
+	if(UseSystemCursor != m_PrismSystemCursorActive)
+	{
+		m_PrismSystemCursorActive = UseSystemCursor;
+		if(UseSystemCursor)
+			Input()->MouseModeAbsolute();
+		Input()->SetMenuCursorVisible(UseSystemCursor);
+		if(!UseSystemCursor && !GameClient()->m_GameConsole.IsActive())
+			Input()->MouseModeRelative();
+	}
+	if(UseSystemCursor)
+		Ui()->SyncNativeMousePos(Input()->NativeMousePos());
 
 	if(Client()->State() == IClient::STATE_ONLINE && GameClient()->m_ServerMode == CGameClient::SERVERMODE_PUREMOD)
 	{
@@ -2444,7 +2459,7 @@ void CMenus::OnRender()
 		}
 		RenderSettingsPrism(*Ui()->Screen());
 		Ui()->RenderPopupMenus();
-		if(m_PrismOpen)
+		if(m_PrismOpen && !UseSystemCursor)
 			RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
 		Ui()->FinishCheck();
 		Ui()->ClearHotkeys();
@@ -2477,7 +2492,8 @@ void CMenus::OnRender()
 	if(IsActive())
 	{
 		Ui()->RenderBackButton();
-		RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
+		if(!UseSystemCursor)
+			RenderTools()->RenderCursor(Ui()->MousePos(), 24.0f);
 	}
 
 	// render debug information

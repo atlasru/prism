@@ -292,6 +292,11 @@ void CInput::MouseModeAbsolute()
 	Graphics()->SetWindowGrab(false);
 }
 
+void CInput::SetMenuCursorVisible(bool Visible)
+{
+	SDL_ShowCursor(Visible ? SDL_ENABLE : SDL_DISABLE);
+}
+
 void CInput::MouseModeRelative()
 {
 	m_InputGrabbed = true;

@@ -3,6 +3,7 @@
 #include <game/client/gameclient.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include <engine/shared/config.h>
 #include <game/client/prism.h>
@@ -15,7 +16,9 @@
 void CMenus::RenderSettingsPrism(CUIRect Screen)
 {
 	Prism::Validate(g_Config);
-	const float Motion = g_Config.m_PrismReducedMotion ? 1.0f : std::clamp(Client()->RenderFrameTime() * 15.0f, 0.0f, 1.0f);
+	const bool Animate = g_Config.m_PrismAnimations && !g_Config.m_PrismReducedMotion && g_Config.m_PrismThemeAnimation > 0;
+	const float Duration = std::max(0.01f, g_Config.m_PrismThemeAnimation / 1000.0f);
+	const float Motion = Animate ? 1.0f - std::exp(-std::clamp(Client()->RenderFrameTime(), 0.0f, 0.1f) * 4.0f / Duration) : 1.0f;
 	m_PrismTransition += ((m_PrismOpen ? 1.0f : 0.0f) - m_PrismTransition) * Motion;
 	if(!m_PrismOpen && m_PrismTransition < 0.01f)
 	{
@@ -27,58 +30,171 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	const PrismUi::STheme Theme(g_Config);
 	const float Opacity = g_Config.m_PrismPanelOpacity / 100.0f;
 	const float Scale = g_Config.m_PrismMenuScale / 100.0f;
-	Screen.Draw(Theme.m_Background.WithAlpha(0.66f * Fade), IGraphics::CORNER_NONE, 0.0f);
+	const float BackdropDarkness = g_Config.m_PrismHudEdit && m_PrismCategory == 1 ? 0.28f : g_Config.m_PrismGlassDarkness / 100.0f;
+	Screen.Draw(ColorRGBA(0.025f, 0.029f, 0.034f, BackdropDarkness * Fade), IGraphics::CORNER_NONE, 0.0f);
 
 	CUIRect Panel = Screen;
-	Panel.w = std::min(Screen.w - 24.0f, 760.0f * Scale);
-	Panel.h = std::min(Screen.h - 24.0f, 510.0f * Scale);
-	Panel.x = Screen.x + (Screen.w - Panel.w) * 0.5f;
-	Panel.y = Screen.y + (Screen.h - Panel.h) * 0.5f + (1.0f - Fade) * 13.0f;
+	Panel.w = std::max(1.0f, std::min(Screen.w - 24.0f, 620.0f * Scale));
+	Panel.h = std::max(1.0f, std::min(Screen.h - 24.0f, 410.0f * Scale));
+	const float TravelX = std::max(0.0f, Screen.w - Panel.w);
+	const float TravelY = std::max(0.0f, Screen.h - Panel.h);
+	Panel.x = Screen.x + TravelX * g_Config.m_PrismMenuX / 10000.0f;
+	Panel.y = Screen.y + TravelY * g_Config.m_PrismMenuY / 10000.0f;
+	if(m_PrismOpen && !g_Config.m_PrismMenuLock)
+	{
+		CUIRect Grab = Panel;
+		Grab.h = std::min(38.0f, Panel.h);
+		Grab.w = std::max(0.0f, Grab.w - 75.0f);
+		if(!m_PrismDragging && Ui()->ActiveItem() == nullptr && Ui()->MouseButtonClicked(0) && Ui()->MouseInside(&Grab))
+		{
+			m_PrismDragging = true;
+			m_PrismDragOffset = Ui()->MousePos() - Panel.TopLeft();
+			Ui()->SetActiveItem(&m_PrismDragging);
+		}
+		if(m_PrismDragging && Ui()->MouseButton(0))
+		{
+			Ui()->CheckActiveItem(&m_PrismDragging);
+			float X = std::clamp(Ui()->MouseX() - m_PrismDragOffset.x - Screen.x, 0.0f, TravelX);
+			float Y = std::clamp(Ui()->MouseY() - m_PrismDragOffset.y - Screen.y, 0.0f, TravelY);
+			if(g_Config.m_PrismMenuSnap)
+			{
+				X = PrismQol::HudSnap(X, Screen.w, Panel.w, 8.0f);
+				Y = PrismQol::HudSnap(Y, Screen.h, Panel.h, 8.0f);
+			}
+			g_Config.m_PrismMenuX = TravelX > 0 ? std::clamp((int)std::round(X / TravelX * 10000.0f), 0, 10000) : 5000;
+			g_Config.m_PrismMenuY = TravelY > 0 ? std::clamp((int)std::round(Y / TravelY * 10000.0f), 0, 10000) : 5000;
+			Panel.x = Screen.x + X;
+			Panel.y = Screen.y + Y;
+		}
+		else if(m_PrismDragging)
+		{
+			m_PrismDragging = false;
+			Ui()->SetActiveItem(nullptr);
+		}
+	}
+	else if(m_PrismDragging)
+	{
+		m_PrismDragging = false;
+		Ui()->SetActiveItem(nullptr);
+	}
+	const float VisualY = (1.0f - Fade) * 9.0f;
+	Panel.y += VisualY;
 	CUIRect Shadow = Panel;
 	Shadow.x -= 8.0f;
 	Shadow.y -= 3.0f;
 	Shadow.w += 16.0f;
 	Shadow.h += 17.0f;
-	Shadow.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, 0.26f * Fade), IGraphics::CORNER_ALL, 23.0f);
+	const float Radius = g_Config.m_PrismThemeRounding;
+	Shadow.Draw(ColorRGBA(0.0f, 0.0f, 0.0f, g_Config.m_PrismThemeShadow / 100.0f * Fade), IGraphics::CORNER_ALL, Radius + 3.0f);
 	CUIRect Edge = Panel;
 	Edge.Margin(-1.0f, &Edge);
-	Edge.Draw(ColorRGBA(0.61f, 0.72f, 0.83f, 0.18f * Fade), IGraphics::CORNER_ALL, 20.0f);
-	Panel.Draw(Theme.m_Panel.WithAlpha(Opacity * Fade), IGraphics::CORNER_ALL, 19.0f);
+	Edge.Draw(Theme.m_Text.WithAlpha(g_Config.m_PrismThemeBorder / 500.0f * Fade), IGraphics::CORNER_ALL, Radius + 1.0f);
+	Panel.Draw(Theme.m_Panel.WithAlpha((0.74f + 0.26f * Opacity) * Fade), IGraphics::CORNER_ALL, Radius);
 	CUIRect Sheen;
-	Panel.HSplitTop(52.0f, &Sheen, nullptr);
-	Sheen.Draw(ColorRGBA(0.65f, 0.76f, 0.86f, 0.065f * Fade), IGraphics::CORNER_T, 19.0f);
+	Panel.HSplitTop(41.0f, &Sheen, nullptr);
+	const float Tint = g_Config.m_PrismGlassTint / 100.0f;
+	Sheen.Draw4(Theme.m_Accent.WithAlpha(Tint * 0.20f * Fade), Theme.m_Accent.WithAlpha(Tint * 0.07f * Fade),
+		Theme.m_Panel.WithAlpha(0.02f * Fade), Theme.m_Panel.WithAlpha(0.02f * Fade), IGraphics::CORNER_T, 11.0f);
+	if(m_PrismOpen && m_PrismCategory == 1 && g_Config.m_PrismHudEdit && g_Config.m_PrismHudEnabled)
+	{
+		int *apEnabled[] = {&g_Config.m_PrismHudHotkeys, &g_Config.m_PrismHudIdentity, &g_Config.m_PrismHudPerformance,
+			&g_Config.m_PrismHudDummy, &g_Config.m_PrismHudStaff, &g_Config.m_PrismHudInput, &g_Config.m_PrismHudEffects};
+		int *apX[] = {&g_Config.m_PrismHudHotkeysX, &g_Config.m_PrismHudIdentityX, &g_Config.m_PrismHudPerformanceX,
+			&g_Config.m_PrismHudDummyX, &g_Config.m_PrismHudStaffX, &g_Config.m_PrismHudInputX, &g_Config.m_PrismHudEffectsX};
+		int *apY[] = {&g_Config.m_PrismHudHotkeysY, &g_Config.m_PrismHudIdentityY, &g_Config.m_PrismHudPerformanceY,
+			&g_Config.m_PrismHudDummyY, &g_Config.m_PrismHudStaffY, &g_Config.m_PrismHudInputY, &g_Config.m_PrismHudEffectsY};
+		int *apScale[] = {&g_Config.m_PrismHudHotkeysScale, &g_Config.m_PrismHudIdentityScale,
+			&g_Config.m_PrismHudPerformanceScale, &g_Config.m_PrismHudDummyScale, &g_Config.m_PrismHudStaffScale,
+			&g_Config.m_PrismHudInputScale, &g_Config.m_PrismHudEffectsScale};
+		static int s_aHudDragIds[PrismQol::NUM_HUD_MODULES] = {};
+		const float ToUi = Screen.h / 300.0f;
+		if(!Ui()->MouseButton(0))
+		{
+			if(m_PrismHudDragIndex >= 0)
+				Ui()->SetActiveItem(nullptr);
+			m_PrismHudDragIndex = -1;
+		}
+		for(int i = PrismQol::NUM_HUD_MODULES - 1; i >= 0; --i)
+		{
+			if(!*apEnabled[i])
+				continue;
+			float Width, Height;
+			PrismQol::HudModuleExtent(i, g_Config.m_PrismHudScale, *apScale[i], g_Config.m_PrismHudPadding,
+				g_Config.m_PrismHudFontSize, g_Config.m_PrismInputKeySize, Width, Height);
+			CUIRect Handle;
+			Handle.w = std::min(Width * ToUi, Screen.w);
+			Handle.h = std::min(Height * ToUi, Screen.h);
+			Handle.x = Screen.x + PrismQol::HudCoordinate(*apX[i], Screen.w, Handle.w);
+			Handle.y = Screen.y + PrismQol::HudCoordinate(*apY[i], Screen.h, Handle.h);
+			if(!g_Config.m_PrismHudLayoutLock && m_PrismHudDragIndex == -1 && Ui()->ActiveItem() == nullptr &&
+				Ui()->MouseButtonClicked(0) && !Panel.Inside(Ui()->MousePos()) && Ui()->MouseInside(&Handle))
+			{
+				m_PrismHudDragIndex = i;
+				m_PrismHudDragOffset = Ui()->MousePos() - Handle.TopLeft();
+				Ui()->SetActiveItem(&s_aHudDragIds[i]);
+			}
+			if(m_PrismHudDragIndex == i && Ui()->MouseButton(0) && !g_Config.m_PrismHudLayoutLock)
+			{
+				Ui()->CheckActiveItem(&s_aHudDragIds[i]);
+				float X = std::clamp(Ui()->MouseX() - m_PrismHudDragOffset.x - Screen.x, 0.0f, Screen.w - Handle.w);
+				float Y = std::clamp(Ui()->MouseY() - m_PrismHudDragOffset.y - Screen.y, 0.0f, Screen.h - Handle.h);
+				if(g_Config.m_PrismHudEdgeSnap)
+				{
+					X = PrismQol::HudSnap(X, Screen.w, Handle.w, 7.0f);
+					Y = PrismQol::HudSnap(Y, Screen.h, Handle.h, 7.0f);
+				}
+				*apX[i] = PrismQol::HudNormalize(X, Screen.w);
+				*apY[i] = PrismQol::HudNormalize(Y, Screen.h);
+				g_Config.m_PrismHudPreset = PrismQol::HUD_CUSTOM;
+				Handle.x = Screen.x + PrismQol::HudCoordinate(*apX[i], Screen.w, Handle.w);
+				Handle.y = Screen.y + PrismQol::HudCoordinate(*apY[i], Screen.h, Handle.h);
+			}
+			const ColorRGBA OutlineColor = Theme.m_Accent.WithAlpha(m_PrismHudDragIndex == i ? 0.75f : 0.38f);
+			const float Stroke = 1.0f;
+			CUIRect Border = {Handle.x, Handle.y, Handle.w, Stroke};
+			Border.Draw(OutlineColor, IGraphics::CORNER_NONE, 0.0f);
+			Border.y = Handle.y + Handle.h - Stroke;
+			Border.Draw(OutlineColor, IGraphics::CORNER_NONE, 0.0f);
+			Border = {Handle.x, Handle.y, Stroke, Handle.h};
+			Border.Draw(OutlineColor, IGraphics::CORNER_NONE, 0.0f);
+			Border.x = Handle.x + Handle.w - Stroke;
+			Border.Draw(OutlineColor, IGraphics::CORNER_NONE, 0.0f);
+		}
+	}
+	else
+		m_PrismHudDragIndex = -1;
 
 	// Closing is purely visual: release interactive items immediately.
 	if(!m_PrismOpen)
 		return;
 
 	CUIRect Inner = Panel;
-	Inner.Margin(17.0f, &Inner);
+	Inner.Margin(11.0f, &Inner);
 	CUIRect Header, Body, Footer;
-	Inner.HSplitTop(47.0f, &Header, &Inner);
-	Inner.HSplitBottom(25.0f, &Body, &Footer);
+	Inner.HSplitTop(35.0f, &Header, &Inner);
+	Inner.HSplitBottom(19.0f, &Body, &Footer);
 	CUIRect Title, Close;
 	Header.VSplitRight(67.0f, &Title, &Close);
 	const float PreviousTextScaleX = TextRender()->GetTextScaleX();
 	TextRender()->SetFontPreset(EFontPreset::PRISM_HEADING);
 	TextRender()->SetTextScaleX(g_Config.m_PrismThemeHeadingWidth / 100.0f);
-	Ui()->DoLabel(&Title, "PRISM", 18.0f, TEXTALIGN_ML);
+	Ui()->DoLabel(&Title, "PRISM", 15.0f, TEXTALIGN_ML);
 	TextRender()->SetTextScaleX(PreviousTextScaleX);
 	TextRender()->SetFontPreset(EFontPreset::PRISM_BODY);
 	static CButtonContainer s_Close;
-	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.52f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
+	if(DoButton_Menu(&s_Close, "Close", 0, &Close, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.46f, ColorRGBA(0.35f, 0.43f, 0.51f, 0.22f)))
 	{
 		Ui()->ClosePopupMenus();
 		m_PrismOpen = false;
 	}
 
 	CUIRect Sidebar, Content;
-	Body.VSplitLeft(std::min(153.0f * Scale, Body.w * 0.29f), &Sidebar, &Content);
-	Sidebar.VSplitRight(12.0f, &Sidebar, nullptr);
-	Sidebar.Draw(ColorRGBA(0.026f, 0.041f, 0.060f, 0.52f * Fade), IGraphics::CORNER_ALL, 12.0f);
-	Sidebar.Margin(8.0f, &Sidebar);
-	Content.Draw(ColorRGBA(0.034f, 0.049f, 0.068f, 0.45f * Fade), IGraphics::CORNER_ALL, 12.0f);
-	Content.Margin(12.0f, &Content);
+	Body.VSplitLeft(std::min(116.0f * Scale, Body.w * 0.25f), &Sidebar, &Content);
+	Sidebar.VSplitRight(7.0f, &Sidebar, nullptr);
+	Sidebar.Draw(Theme.m_Background.WithAlpha(0.91f * Fade), IGraphics::CORNER_ALL, 8.0f);
+	Sidebar.Margin(6.0f, &Sidebar);
+	Content.Draw(Theme.m_Background.WithAlpha(0.83f * Fade), IGraphics::CORNER_ALL, 8.0f);
+	Content.Margin(8.0f, &Content);
 
 	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings"};
 	static CButtonContainer s_aTabs[7];
@@ -86,13 +202,13 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	for(int i = 0; i < 7; ++i)
 	{
 		CUIRect Tab;
-		Sidebar.HSplitTop(40.0f, &Tab, &Sidebar);
-		Sidebar.HSplitTop(5.0f, nullptr, &Sidebar);
+		Sidebar.HSplitTop(29.0f, &Tab, &Sidebar);
+		Sidebar.HSplitTop(3.0f, nullptr, &Sidebar);
 		const float Target = m_PrismCategory == i ? 1.0f : 0.0f;
 		s_aTabBlend[i] += (Target - s_aTabBlend[i]) * Motion;
 		const float Highlight = s_aTabBlend[i];
 		const ColorRGBA ButtonColor(Theme.m_Accent.r, Theme.m_Accent.g, Theme.m_Accent.b, 0.06f + Highlight * 0.36f);
-		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.42f, ButtonColor))
+		if(DoButton_Menu(&s_aTabs[i], s_apTabs[i], 0, &Tab, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.41f, ButtonColor))
 		{
 			m_PrismCategory = i;
 			Ui()->SetActiveItem(nullptr);
@@ -103,60 +219,60 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	CUIRect ScrollView = Content;
 	CScrollRegion &Scroll = s_aScroll[m_PrismCategory];
 	Scroll.Begin(&ScrollView);
-	auto NextRow = [&](float Height = 34.0f) {
+	auto NextRow = [&](float Height = 28.0f) {
 		CUIRect Row;
 		ScrollView.HSplitTop(Height, &Row, &ScrollView);
 		Scroll.AddRect(Row);
-		ScrollView.HSplitTop(4.0f, nullptr, &ScrollView);
+		ScrollView.HSplitTop(3.0f, nullptr, &ScrollView);
 		return Row;
 	};
 	auto Label = [&](const char *pLabel) {
-		CUIRect Row = NextRow(30.0f);
+		CUIRect Row = NextRow(26.0f);
 		if(!Scroll.RectClipped(Row))
-			Ui()->DoLabel(&Row, pLabel, 15.0f, TEXTALIGN_ML);
+			Ui()->DoLabel(&Row, pLabel, 12.0f, TEXTALIGN_ML);
 	};
 	static float s_aToggleProgress[96] = {};
 	int ToggleIndex = 0;
 	auto Toggle = [&](const char *pLabel, int *pValue) {
-		CUIRect Row = NextRow(35.0f);
+		CUIRect Row = NextRow(29.0f);
 		const int Index = ToggleIndex++;
 		if(Scroll.RectClipped(Row))
 			return;
-		Row.Draw(ColorRGBA(0.45f, 0.55f, 0.65f, 0.095f), IGraphics::CORNER_ALL, 8.0f);
+		Row.Draw(Theme.m_Panel.WithAlpha(0.78f), IGraphics::CORNER_ALL, 6.0f);
 		CUIRect LabelRect, Switch;
-		Row.VSplitRight(52.0f, &LabelRect, &Switch);
-		LabelRect.VMargin(9.0f, &LabelRect);
-		Ui()->DoLabel(&LabelRect, pLabel, 13.0f, TEXTALIGN_ML);
-		Switch.VMargin(7.0f, &Switch);
-		Switch.HMargin(8.0f, &Switch);
+		Row.VSplitRight(39.0f, &LabelRect, &Switch);
+		LabelRect.VMargin(8.0f, &LabelRect);
+		Ui()->DoLabel(&LabelRect, pLabel, 11.0f, TEXTALIGN_ML);
+		Switch.VMargin(5.0f, &Switch);
+		Switch.HMargin(6.0f, &Switch);
 		const float Target = *pValue ? 1.0f : 0.0f;
 		float &Progress = s_aToggleProgress[std::min(Index, 95)];
 		Progress += (Target - Progress) * Motion;
 		const float Position = Progress;
 		Switch.Draw(ColorRGBA(Theme.m_Panel.r + (Theme.m_Accent.r - Theme.m_Panel.r) * Position,
 			Theme.m_Panel.g + (Theme.m_Accent.g - Theme.m_Panel.g) * Position,
-			Theme.m_Panel.b + (Theme.m_Accent.b - Theme.m_Panel.b) * Position, 0.9f), IGraphics::CORNER_ALL, 8.0f);
+			Theme.m_Panel.b + (Theme.m_Accent.b - Theme.m_Panel.b) * Position, 0.9f), IGraphics::CORNER_ALL, 6.0f);
 		CUIRect Knob = Switch;
-		Knob.w = 14.0f;
-		Knob.h = 14.0f;
+		Knob.w = 11.0f;
+		Knob.h = 11.0f;
 		Knob.x += 2.0f + Position * (Switch.w - Knob.w - 4.0f);
 		Knob.y = Switch.y + (Switch.h - Knob.h) * 0.5f;
-		Knob.Draw(ColorRGBA(0.94f, 0.96f, 0.98f, 1.0f), IGraphics::CORNER_ALL, 7.0f);
+		Knob.Draw(ColorRGBA(0.94f, 0.96f, 0.98f, 1.0f), IGraphics::CORNER_ALL, 5.0f);
 		if(Ui()->DoButtonLogic(pValue, *pValue, &Row, BUTTONFLAG_LEFT))
 			*pValue ^= 1;
 	};
 	auto Slider = [&](const char *pLabel, int *pValue, int Min, int Max) {
-		CUIRect Row = NextRow(37.0f);
+		CUIRect Row = NextRow(31.0f);
 		if(!Scroll.RectClipped(Row))
 		{
-			Row.Draw(ColorRGBA(0.45f, 0.55f, 0.65f, 0.065f), IGraphics::CORNER_ALL, 8.0f);
+			Row.Draw(Theme.m_Panel.WithAlpha(0.72f), IGraphics::CORNER_ALL, 6.0f);
 			Row.Margin(5.0f, &Row);
 			Ui()->DoScrollbarOption(pValue, pValue, &Row, pLabel, Min, Max);
 		}
 	};
 	static CButtonContainer s_aColors[16];
 	auto Color = [&](const char *pLabel, unsigned *pValue, int Index) {
-		CUIRect Row = NextRow(31.0f);
+		CUIRect Row = NextRow(27.0f);
 		if(!Scroll.RectClipped(Row))
 			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false);
 	};
@@ -166,8 +282,8 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     // Existing visual presets affect visuals only; all QoL preferences are separate.
     static CButtonContainer s_aActionButtons[32];
     auto Button = [&](const char *pText, int Id, const ColorRGBA &Tint = ColorRGBA(0.37f, 0.47f, 0.58f, 0.25f)) {
-        CUIRect Row = NextRow(35.0f);
-        return !Scroll.RectClipped(Row) && DoButton_Menu(&s_aActionButtons[Id], pText, 0, &Row, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 9.0f, 0.45f, Tint);
+        CUIRect Row = NextRow(29.0f);
+        return !Scroll.RectClipped(Row) && DoButton_Menu(&s_aActionButtons[Id], pText, 0, &Row, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.41f, Tint);
     };
     auto Bind = [&](const char *pLabel, int *pValue, int Target, int ButtonId) {
         char aText[128];
@@ -195,7 +311,20 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Toggle("Performance HUD panel", &g_Config.m_PrismHudPerformance);
         Slider("Menu scale", &g_Config.m_PrismMenuScale, 80, 120);
         Slider("Glass opacity", &g_Config.m_PrismPanelOpacity, 50, 100);
+        Slider("Background darkness", &g_Config.m_PrismGlassDarkness, 0, 100);
+        Slider("Glass tint", &g_Config.m_PrismGlassTint, 0, 100);
+        Toggle("Animations", &g_Config.m_PrismAnimations);
+        Slider("Animation duration (ms)", &g_Config.m_PrismThemeAnimation, 0, 5000);
         Toggle("Reduce animation", &g_Config.m_PrismReducedMotion);
+        Toggle("Lock ClickGUI position", &g_Config.m_PrismMenuLock);
+        Toggle("Snap ClickGUI to edges", &g_Config.m_PrismMenuSnap);
+        if(Button("Reset ClickGUI position", 23))
+        {
+            g_Config.m_PrismMenuX = 5000;
+            g_Config.m_PrismMenuY = 5000;
+        }
+        if(Button(g_Config.m_PrismMenuCursor ? "Menu cursor: System" : "Menu cursor: DDNet", 28))
+            g_Config.m_PrismMenuCursor ^= 1;
         if(Button("Reset visual presets only", 15)) Prism::Reset(g_Config);
         break;
     }
@@ -440,6 +569,9 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Slider("Module scale: Effects", apScale[6], 65, 150);
         Toggle("HUD background", &g_Config.m_PrismHudBackground);
         Toggle("Snap to guides", &g_Config.m_PrismHudSnap);
+        Toggle("Snap to screen edges", &g_Config.m_PrismHudEdgeSnap);
+        Toggle("Lock HUD layout", &g_Config.m_PrismHudLayoutLock);
+        Toggle("Drag widgets on game screen", &g_Config.m_PrismHudEdit);
         Toggle("Show guides", &g_Config.m_PrismHudGuides);
         Slider("Padding", &g_Config.m_PrismHudPadding, 0, 16);
         Slider("Rounding", &g_Config.m_PrismHudRounding, 0, 12);
@@ -531,15 +663,14 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
         Slider("Corner radius", &g_Config.m_PrismThemeRounding, 0, 20);
         Slider("Border opacity", &g_Config.m_PrismThemeBorder, 0, 100);
         Slider("Shadow opacity", &g_Config.m_PrismThemeShadow, 0, 100);
-        Slider("Animation duration", &g_Config.m_PrismThemeAnimation, 80, 400);
         if(Button("Export theme to prism/theme.json", 21)) PrismTheme::Save(Storage(), g_Config);
         if(Button("Import theme from prism/theme.json", 22)) PrismTheme::Load(Storage(), g_Config);
         Label("Visual presets do not change macros or HUD layouts.");
         break;
     }
 	Scroll.End();
-	Footer.Draw(ColorRGBA(0.65f, 0.75f, 0.85f, 0.065f), IGraphics::CORNER_ALL, 8.0f);
-	Ui()->DoLabel(&Footer, "PRISM " PRISM_VERSION "  /  Insert or Esc to close", 11.0f, TEXTALIGN_MC);
+	Footer.Draw(Theme.m_Text.WithAlpha(0.04f), IGraphics::CORNER_ALL, 5.0f);
+	Ui()->DoLabel(&Footer, "PRISM " PRISM_VERSION "  /  Insert or Esc", 9.0f, TEXTALIGN_MC);
 	TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 	Prism::Validate(g_Config);
 }
