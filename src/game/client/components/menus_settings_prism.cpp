@@ -89,7 +89,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	CUIRect Edge = Panel;
 	Edge.Margin(-1.0f, &Edge);
 	Edge.Draw(Theme.m_Text.WithAlpha(g_Config.m_PrismThemeBorder / 500.0f * Fade), IGraphics::CORNER_ALL, Radius + 1.0f);
-	Panel.Draw(Theme.m_Panel.WithAlpha((0.74f + 0.26f * Opacity) * Fade), IGraphics::CORNER_ALL, Radius);
+	Panel.Draw(Theme.m_Panel.WithAlpha((0.38f + 0.61f * Opacity) * Fade), IGraphics::CORNER_ALL, Radius);
 	CUIRect Sheen;
 	Panel.HSplitTop(41.0f, &Sheen, nullptr);
 	const float Tint = g_Config.m_PrismGlassTint / 100.0f;
@@ -142,6 +142,29 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 				{
 					X = PrismQol::HudSnap(X, Screen.w, Handle.w, 7.0f);
 					Y = PrismQol::HudSnap(Y, Screen.h, Handle.h, 7.0f);
+				}
+				if(g_Config.m_PrismHudSnap)
+				{
+					for(int Other = 0; Other < PrismQol::NUM_HUD_MODULES; ++Other)
+					{
+						if(Other == i || !*apEnabled[Other])
+							continue;
+						float OtherWidth, OtherHeight;
+						PrismQol::HudModuleExtent(Other, g_Config.m_PrismHudScale, *apScale[Other], g_Config.m_PrismHudPadding,
+							g_Config.m_PrismHudFontSize, g_Config.m_PrismInputKeySize, OtherWidth, OtherHeight);
+						OtherWidth = std::min(OtherWidth * ToUi, Screen.w);
+						OtherHeight = std::min(OtherHeight * ToUi, Screen.h);
+						const float OtherX = PrismQol::HudCoordinate(*apX[Other], Screen.w, OtherWidth);
+						const float OtherY = PrismQol::HudCoordinate(*apY[Other], Screen.h, OtherHeight);
+						const float GuidesX[] = {OtherX, OtherX + (OtherWidth - Handle.w) / 2.0f, OtherX + OtherWidth - Handle.w};
+						const float GuidesY[] = {OtherY, OtherY + (OtherHeight - Handle.h) / 2.0f, OtherY + OtherHeight - Handle.h};
+						for(float Guide : GuidesX)
+							if(std::abs(X - Guide) < 4.0f)
+								X = std::clamp(Guide, 0.0f, Screen.w - Handle.w);
+						for(float Guide : GuidesY)
+							if(std::abs(Y - Guide) < 4.0f)
+								Y = std::clamp(Guide, 0.0f, Screen.h - Handle.h);
+					}
 				}
 				*apX[i] = PrismQol::HudNormalize(X, Screen.w);
 				*apY[i] = PrismQol::HudNormalize(Y, Screen.h);
@@ -231,14 +254,19 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		if(!Scroll.RectClipped(Row))
 			Ui()->DoLabel(&Row, pLabel, 12.0f, TEXTALIGN_ML);
 	};
-	static float s_aToggleProgress[96] = {};
+	static float s_aaToggleProgress[7][96] = {};
+	static float s_aaToggleHover[7][96] = {};
+	static bool s_aaToggleInitialized[7][96] = {};
 	int ToggleIndex = 0;
 	auto Toggle = [&](const char *pLabel, int *pValue) {
 		CUIRect Row = NextRow(29.0f);
 		const int Index = ToggleIndex++;
 		if(Scroll.RectClipped(Row))
 			return;
-		Row.Draw(Theme.m_Panel.WithAlpha(0.78f), IGraphics::CORNER_ALL, 6.0f);
+		const int Slot = std::min(Index, 95);
+		float &Hover = s_aaToggleHover[m_PrismCategory][Slot];
+		Hover += ((Ui()->MouseInside(&Row) ? 1.0f : 0.0f) - Hover) * Motion;
+		Row.Draw(Theme.m_Panel.WithAlpha(0.72f + 0.16f * Hover), IGraphics::CORNER_ALL, 6.0f);
 		CUIRect LabelRect, Switch;
 		Row.VSplitRight(39.0f, &LabelRect, &Switch);
 		LabelRect.VMargin(8.0f, &LabelRect);
@@ -246,7 +274,12 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		Switch.VMargin(5.0f, &Switch);
 		Switch.HMargin(6.0f, &Switch);
 		const float Target = *pValue ? 1.0f : 0.0f;
-		float &Progress = s_aToggleProgress[std::min(Index, 95)];
+		float &Progress = s_aaToggleProgress[m_PrismCategory][Slot];
+		if(!s_aaToggleInitialized[m_PrismCategory][Slot])
+		{
+			Progress = Target;
+			s_aaToggleInitialized[m_PrismCategory][Slot] = true;
+		}
 		Progress += (Target - Progress) * Motion;
 		const float Position = Progress;
 		Switch.Draw(ColorRGBA(Theme.m_Panel.r + (Theme.m_Accent.r - Theme.m_Panel.r) * Position,
@@ -600,14 +633,14 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
                 Pin.w = 82.0f; Pin.h = 18.0f;
                 Pin.x = Preview.x + PrismQol::HudCoordinate(*apX[i], Preview.w, Pin.w);
                 Pin.y = Preview.y + PrismQol::HudCoordinate(*apY[i], Preview.h, Pin.h);
-                if(s_DragIndex == -1 && Ui()->MouseButtonClicked(0) && Ui()->MouseInside(&Pin))
+				if(!g_Config.m_PrismHudLayoutLock && s_DragIndex == -1 && Ui()->MouseButtonClicked(0) && Ui()->MouseInside(&Pin))
                 {
                     s_DragIndex = i;
                     s_DragOffsetX = Ui()->MouseX() - Pin.x;
                     s_DragOffsetY = Ui()->MouseY() - Pin.y;
                     Ui()->SetActiveItem(&s_aPins[i]);
                 }
-                if(s_DragIndex == i && Ui()->MouseButton(0))
+				if(s_DragIndex == i && Ui()->MouseButton(0) && !g_Config.m_PrismHudLayoutLock)
                 {
                     Ui()->CheckActiveItem(&s_aPins[i]);
                     float NewX = Ui()->MouseX() - s_DragOffsetX - Preview.x;
