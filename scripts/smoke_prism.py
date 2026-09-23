@@ -62,11 +62,11 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     assert values.get('prism_hook_particle_cap') == '512', values
     assert values.get('prism_hud_input_x', '0') == '0', values
     values = run(['prism_menu_x 7350', 'prism_menu_y 1240',
-                  'prism_menu_cursor 1', 'prism_animations 0',
+                  'prism_menu_cursor 0', 'prism_animations 0',
                   'prism_theme_animation 5000', 'prism_glass_darkness 41',
                   'prism_hud_edge_snap 0', 'prism_hud_layout_lock 1'])
     appearance = {'prism_menu_x': '7350', 'prism_menu_y': '1240',
-                  'prism_menu_cursor': '1', 'prism_animations': '0',
+                  'prism_menu_cursor': '0', 'prism_animations': '0',
                   'prism_theme_animation': '5000', 'prism_glass_darkness': '41',
                   'prism_hud_edge_snap': '0', 'prism_hud_layout_lock': '1'}
     for key, value in appearance.items():
