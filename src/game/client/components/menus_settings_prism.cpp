@@ -307,7 +307,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	auto Color = [&](const char *pLabel, unsigned *pValue, int Index) {
 		CUIRect Row = NextRow(27.0f);
 		if(!Scroll.RectClipped(Row))
-			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false);
+			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false, nullptr, Index == 9 || Index == 10);
 	};
 
 
