@@ -2636,6 +2636,8 @@ if(CLIENT)
     prediction/gameworld.cpp
     prediction/gameworld.h
     prism.h
+    prism_assist.cpp
+    prism_assist.h
     prism_effects.h
     prism_effects_render.h
     prism_input.h
