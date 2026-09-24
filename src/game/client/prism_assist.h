@@ -53,10 +53,23 @@ struct STrajectory
 	int m_FirstHazard = -1;
 	bool m_Unknown = false;
 	float m_Score = 0;
+	float m_MinSafetyMargin = 16.0f;
 	int m_Direction = 0;
 	bool m_Jump = false;
 	bool Safe() const { return m_Count > 0 && m_FirstHazard == -1 && !m_Unknown; }
 };
+
+inline float ScoreTrajectory(const STrajectory &Path, vec2 DesiredPos = vec2(0, 0), float DesiredWeight = 0.0f)
+{
+	if(Path.m_Unknown)
+		return -10000.0f;
+	if(Path.m_FirstHazard >= 0)
+		return -1000.0f + Path.m_FirstHazard;
+	if(!Path.m_Count)
+		return -10000.0f;
+	const SState &Final = Path.m_aStates[Path.m_Count - 1];
+	return 100.0f + Path.m_MinSafetyMargin - length(Final.m_Vel) * 0.1f - distance(Final.m_Pos, DesiredPos) * DesiredWeight;
+}
 
 // Uses DDNet's character core, collision and tuning. Full game-world tile
 // effects (switches, speedups, teleport outcomes) cannot be simulated by the
@@ -84,6 +97,16 @@ class CPredictor
 				if(Index >= 0)
 					Unknown |= m_pCollision->IsTeleport(Index) || m_pCollision->IsEvilTeleport(Index) || m_pCollision->IsSpeedup(Index) || m_pCollision->IsTune(Index);
 			}
+	}
+	bool NearHazard(vec2 Pos) const
+	{
+		const float Radius = CCharacterCore::PhysicalSize() / 3.0f + 8.0f;
+		for(float X : {-Radius, Radius})
+			for(float Y : {-Radius, Radius})
+				if(HazardTile(m_pCollision->GetCollisionAt(Pos.x + X, Pos.y + Y)) ||
+					HazardTile(m_pCollision->GetFrontCollisionAt(Pos.x + X, Pos.y + Y)))
+					return true;
+		return false;
 	}
 
 public:
@@ -141,13 +164,15 @@ public:
 			for(int Step = 0; Step <= 4; ++Step)
 				Sample(mix(Previous, Core.m_Pos, Step / 4.0f), State.m_Hazard, State.m_Unknown);
 			Out.m_Count = Tick + 1;
+			if(NearHazard(State.m_Pos))
+				Out.m_MinSafetyMargin = 8.0f;
 			Out.m_Unknown |= State.m_Unknown;
 			if(State.m_Hazard && Out.m_FirstHazard == -1)
 				Out.m_FirstHazard = Tick;
 			if(State.m_Hazard || State.m_Unknown)
 				break;
 		}
-		Out.m_Score = Out.m_Unknown ? -10000.0f : Out.m_FirstHazard >= 0 ? -1000.0f + Out.m_FirstHazard : 100.0f;
+		Out.m_Score = ScoreTrajectory(Out);
 		return true;
 	}
 };
@@ -172,7 +197,7 @@ inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int Ma
 		if(!Path.Safe() || ManualDirection && Path.m_Direction != ManualDirection || ManualJump && !Path.m_Jump)
 			continue;
 		const int Cost = (Path.m_Direction != pPaths[0].m_Direction ? 2 : 0) + (Path.m_Jump != pPaths[0].m_Jump ? 1 : 0);
-		if(Cost < BestCost)
+		if(Cost < BestCost || Cost == BestCost && (Result.m_Selected == 0 || Path.m_Score > pPaths[Result.m_Selected].m_Score))
 		{
 			BestCost = Cost;
 			Result = {true, Path.m_Direction, Path.m_Jump, i};

@@ -49,6 +49,21 @@ TEST(PrismAssist, ManualDirectionAndUnknownTilesBlockUnsafeIntervention)
  EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 0, false).m_Apply);
 }
 
+TEST(PrismAssist, TrajectoryScoreRewardsSafetyAndDesiredLanding)
+{
+ PrismAssist::STrajectory Safe, Danger;
+ Safe.m_Count = Danger.m_Count = 3;
+ Safe.m_aStates[2].m_Pos = vec2(20, 0);
+ Danger = Safe;
+ Danger.m_FirstHazard = 2;
+ EXPECT_GT(PrismAssist::ScoreTrajectory(Safe), PrismAssist::ScoreTrajectory(Danger));
+ const float OnTarget = PrismAssist::ScoreTrajectory(Safe, vec2(20, 0), 1.0f);
+ const float FarFromTarget = PrismAssist::ScoreTrajectory(Safe, vec2(120, 0), 1.0f);
+ EXPECT_GT(OnTarget, FarFromTarget);
+ Safe.m_Unknown = true;
+ EXPECT_LT(PrismAssist::ScoreTrajectory(Safe), PrismAssist::ScoreTrajectory(Danger));
+}
+
 TEST(PrismAssist, TargetRetentionAndAimBounds)
 {
  const PrismAssist::STargetCandidate aTargets[] = {{7, 100, 0.1f}, {9, 90, 0.2f}};

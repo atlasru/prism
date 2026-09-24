@@ -179,8 +179,13 @@ public:
 	std::array<PrismAssist::STrajectory, PrismAssist::MAX_CANDIDATES> m_aPrismAssistPaths{};
 	int m_PrismAssistPathCount = 0;
 	int m_PrismAssistSelected = 0;
+	int m_PrismAvoidJumpCooldown = 0;
+	int m_PrismAvoidLastDirection = 0;
 	int m_PrismAimTargetId = -1;
 	vec2 m_PrismAimPredictedPos = vec2(0, 0);
+	vec2 m_PrismAimOutput = vec2(0, 0);
+	vec2 m_PrismAimLastManual = vec2(0, 0);
+	bool m_PrismAimActive = false;
 	void PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump);
 	void PrismRenderAssistDebug();
 	bool m_aPrismLastAssisted[NUM_DUMMIES] = {};
