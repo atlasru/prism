@@ -111,7 +111,7 @@ void CGameClient::OnConsoleInit()
  Console()->Register("prism_apply_preset", "i[preset]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) { Prism::ApplyPreset(g_Config, pResult->GetInteger(0)); }, this, "Apply Prism preset: 0 Default, 1 Clean, 2 Competitive, 3 Cinematic, 4 Custom");
  Console()->Register("prism_toggle", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { g_Config.m_PrismEnabled ^= 1; Prism::Validate(g_Config); }, this, "Toggle Prism visuals without changing DDNet settings");
  Console()->Register("prism_reset", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { Prism::Reset(g_Config); }, this, "Reset all Prism settings");
- Console()->Register("prism_emergency_stop", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *pUserData) { static_cast<CGameClient *>(pUserData)->PrismEmergencyStop(); }, this, "Stop Double Tee and all active macros, releasing owned controls");
+ Console()->Register("prism_emergency_stop", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *pUserData) { static_cast<CGameClient *>(pUserData)->PrismEmergencyStop(); }, this, "Stop Double Tee, macros and Assist, releasing owned controls");
  auto PrismChanged = [](IConsole::IResult *pResult, void *, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
   pfnCallback(pResult, pCallbackUserData);
   if(pResult->NumArguments()) Prism::Validate(g_Config);
@@ -573,14 +573,26 @@ bool CGameClient::PrismInputAllowed()
 void CGameClient::PrismEmergencyStop()
 {
 	g_Config.m_PrismDoubleEnabled = 0;
+	g_Config.m_PrismAimAssist = 0;
+	g_Config.m_PrismFreezeAvoid = 0;
 	m_PrismHammerCounter = 0;
 	m_PrismMacros.Cancel();
+	m_PrismAimTargetId = -1;
+	m_PrismAimActive = false;
+	m_PrismAssistPathCount = 0;
+	m_PrismAvoidJumpCooldown = 0;
+	m_PrismAvoidLastDirection = 0;
 	// The next input snapshot releases any previously owned fire counter.
 }
 
 void CGameClient::OnDummySwap()
 {
 	m_PrismMacros.Cancel();
+	m_PrismAimTargetId = -1;
+	m_PrismAimActive = false;
+	m_PrismAssistPathCount = 0;
+	m_PrismAvoidJumpCooldown = 0;
+	m_PrismAvoidLastDirection = 0;
 	m_PrismHammerCounter = 0;
 	if(g_Config.m_ClDummyResetOnSwitch)
 	{
@@ -5472,4 +5484,3 @@ void CGameClient::StoreSave(const char *pTeamMembers, const char *pGeneratedCode
 	CsvWrite(File, std::size(SAVES_HEADER), apColumns);
 	io_close(File);
 }
-
