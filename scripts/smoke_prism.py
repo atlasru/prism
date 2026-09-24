@@ -74,6 +74,17 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     values = run([])
     for key, value in appearance.items():
         assert values.get(key) == value, (key, values)
+    values = run(['prism_aim_assist 1', 'prism_aim_hook_only 1',
+                  'prism_aim_fov 87', 'prism_aim_prediction 6',
+                  'prism_freeze_avoid 2', 'prism_freeze_horizon 18'])
+    assist = {'prism_aim_assist': '1', 'prism_aim_hook_only': '1',
+              'prism_aim_fov': '87', 'prism_aim_prediction': '6',
+              'prism_freeze_avoid': '2', 'prism_freeze_horizon': '18'}
+    for key, value in assist.items():
+        assert values.get(key) == value, (key, values)
+    values = run([])
+    for key, value in assist.items():
+        assert values.get(key) == value, (key, values)
     run(['prism_reset'])
 save_report()
 print(f'Packaged-client startup/config persistence smoke: {len(results)} process runs passed. Visual tests not performed.')

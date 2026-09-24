@@ -219,10 +219,10 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Content.Draw(Theme.m_Background.WithAlpha(0.83f * Fade), IGraphics::CORNER_ALL, 8.0f);
 	Content.Margin(8.0f, &Content);
 
-	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings"};
-	static CButtonContainer s_aTabs[7];
-	static float s_aTabBlend[7] = {};
-	for(int i = 0; i < 7; ++i)
+	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings", "Assist"};
+	static CButtonContainer s_aTabs[8];
+	static float s_aTabBlend[8] = {};
+	for(int i = 0; i < 8; ++i)
 	{
 		CUIRect Tab;
 		Sidebar.HSplitTop(29.0f, &Tab, &Sidebar);
@@ -238,7 +238,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		}
 	}
 
-	static CScrollRegion s_aScroll[7];
+	static CScrollRegion s_aScroll[8];
 	CUIRect ScrollView = Content;
 	CScrollRegion &Scroll = s_aScroll[m_PrismCategory];
 	Scroll.Begin(&ScrollView);
@@ -254,9 +254,9 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		if(!Scroll.RectClipped(Row))
 			Ui()->DoLabel(&Row, pLabel, 12.0f, TEXTALIGN_ML);
 	};
-	static float s_aaToggleProgress[7][96] = {};
-	static float s_aaToggleHover[7][96] = {};
-	static bool s_aaToggleInitialized[7][96] = {};
+	static float s_aaToggleProgress[8][96] = {};
+	static float s_aaToggleHover[8][96] = {};
+	static bool s_aaToggleInitialized[8][96] = {};
 	int ToggleIndex = 0;
 	auto Toggle = [&](const char *pLabel, int *pValue) {
 		CUIRect Row = NextRow(29.0f);
@@ -326,6 +326,26 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     };
     switch(m_PrismCategory)
     {
+    case 7: // Bounded local prediction and input assistance
+        Label("Assist   /   local prediction");
+        Toggle("Aim Assist", &g_Config.m_PrismAimAssist);
+        Toggle("Hook aim only", &g_Config.m_PrismAimHookOnly);
+        if(Button(g_Config.m_PrismAimTargetMode == 0 ? "Target: nearest crosshair" :
+                g_Config.m_PrismAimTargetMode == 1 ? "Target: nearest player" : "Target: lowest angle", 29))
+            g_Config.m_PrismAimTargetMode = (g_Config.m_PrismAimTargetMode + 1) % 3;
+        Slider("Aim FOV (degrees)", &g_Config.m_PrismAimFov, 5, 180);
+        Slider("Target range", &g_Config.m_PrismAimRange, 64, 1200);
+        Slider("Aim strength (%)", &g_Config.m_PrismAimStrength, 1, 100);
+        Slider("Lead target (ticks)", &g_Config.m_PrismAimPrediction, 0, 12);
+        Toggle("Aim prediction debug", &g_Config.m_PrismAimDebug);
+        Label("Freeze Avoid   /   only when needed");
+        if(Button(g_Config.m_PrismFreezeAvoid == 0 ? "Freeze Avoid: Off" :
+                g_Config.m_PrismFreezeAvoid == 1 ? "Freeze Avoid: Warning" : "Freeze Avoid: Assist", 30))
+            g_Config.m_PrismFreezeAvoid = (g_Config.m_PrismFreezeAvoid + 1) % 3;
+        Slider("Prediction horizon (ticks)", &g_Config.m_PrismFreezeHorizon, 4, 24);
+        Toggle("Show trajectory debug", &g_Config.m_PrismFreezeDebug);
+        Label("Manual direction and macros retain priority.");
+        break;
     case 6: // Settings and status
     {
         Label("Prism   /   Control center");

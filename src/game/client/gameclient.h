@@ -5,10 +5,12 @@
 
 #include "render.h"
 #include "prism_qol.h"
+#include "prism_assist.h"
 
 #include <base/color.h>
 #include <base/types.h>
 #include <base/vmath.h>
+#include <array>
 
 #include <engine/client.h>
 #include <engine/client/enums.h>
@@ -173,6 +175,14 @@ public:
 	CControls m_Controls;
 	// Phase 3: only client-side input composition, never prediction/physics/protocol.
 	PrismQol::CMacroEngine m_PrismMacros;
+	PrismAssist::CPredictor m_PrismPredictor;
+	std::array<PrismAssist::STrajectory, PrismAssist::MAX_CANDIDATES> m_aPrismAssistPaths{};
+	int m_PrismAssistPathCount = 0;
+	int m_PrismAssistSelected = 0;
+	int m_PrismAimTargetId = -1;
+	vec2 m_PrismAimPredictedPos = vec2(0, 0);
+	void PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump);
+	void PrismRenderAssistDebug();
 	bool m_aPrismLastAssisted[NUM_DUMMIES] = {};
 	int m_PrismHammerCounter = 0;
 	void PrismEmergencyStop();

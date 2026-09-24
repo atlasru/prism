@@ -1132,6 +1132,7 @@ void CPlayers::OnRender()
 		RenderHookCollLine(ScreenRect, &pClientData->m_RenderPrev, &pClientData->m_RenderCur, RenderLastId);
 		RenderPlayer(ScreenRect, &pClientData->m_RenderPrev, &pClientData->m_RenderCur, &aRenderInfo[RenderLastId], RenderLastId);
 	}
+	GameClient()->PrismRenderAssistDebug();
 	// Hidden, absent, filtered or retracted owners never retain a cosmetic history.
 	for(int Id = 0; Id < MAX_CLIENTS; ++Id)
 	{

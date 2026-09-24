@@ -2454,7 +2454,7 @@ void CMenus::OnRender()
 		Ui()->Update();
 		if(m_PrismOpen && !Ui()->IsPopupOpen() && Ui()->ConsumeHotkey(CUi::HOTKEY_TAB))
 		{
-			m_PrismCategory = (m_PrismCategory + 1) % 7;
+			m_PrismCategory = (m_PrismCategory + 1) % 8;
 			Ui()->SetActiveItem(nullptr);
 		}
 		RenderSettingsPrism(*Ui()->Screen());

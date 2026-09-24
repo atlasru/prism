@@ -1,0 +1,12 @@
+// Prism Assist configuration. No include guard: consumed by DDNet config X-macros.
+MACRO_CONFIG_INT(PrismAimAssist, prism_aim_assist, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Assist aim using visible predicted player positions")
+MACRO_CONFIG_INT(PrismAimHookOnly, prism_aim_hook_only, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Apply aim assistance only while hooking")
+MACRO_CONFIG_INT(PrismAimTargetMode, prism_aim_target_mode, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Aim target priority: crosshair, distance, angular error")
+MACRO_CONFIG_INT(PrismAimFov, prism_aim_fov, 50, 5, 180, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Aim assistance angular FOV in degrees")
+MACRO_CONFIG_INT(PrismAimRange, prism_aim_range, 500, 64, 1200, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Aim assistance maximum target distance")
+MACRO_CONFIG_INT(PrismAimStrength, prism_aim_strength, 35, 1, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Aim assistance interpolation percent per input tick")
+MACRO_CONFIG_INT(PrismAimPrediction, prism_aim_prediction, 3, 0, 12, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Target motion prediction in ticks")
+MACRO_CONFIG_INT(PrismAimDebug, prism_aim_debug, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show aim assistance debug")
+MACRO_CONFIG_INT(PrismFreezeAvoid, prism_freeze_avoid, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Freeze Avoid: off, warning, assist")
+MACRO_CONFIG_INT(PrismFreezeHorizon, prism_freeze_horizon, 12, 4, 24, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Freeze Avoid lookahead in ticks")
+MACRO_CONFIG_INT(PrismFreezeDebug, prism_freeze_debug, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show Freeze Avoid trajectory debug")

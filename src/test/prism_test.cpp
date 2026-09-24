@@ -1,11 +1,66 @@
 // Prism additions, distributed under the zlib license in license.txt.
 #include <game/client/prism.h>
 #include <game/client/prism_qol.h>
+#include <game/client/prism_assist.h>
 #include <engine/shared/console.h>
 #include <gtest/gtest.h>
 #include <climits>
 #include <memory>
 #include <vector>
+
+TEST(PrismAssist, BoundedPredictionAndHazardClassification)
+{
+ EXPECT_EQ(PrismAssist::ClampHorizon(10000), PrismAssist::MAX_TICKS);
+ EXPECT_EQ(PrismAssist::ClampHorizon(-10), 1);
+ EXPECT_LE(PrismAssist::MAX_CANDIDATES, 7);
+ EXPECT_LE(PrismAssist::MAX_PHASES, 3);
+ EXPECT_TRUE(PrismAssist::HazardTile(TILE_FREEZE));
+ EXPECT_TRUE(PrismAssist::HazardTile(TILE_DEATH));
+ EXPECT_FALSE(PrismAssist::HazardTile(TILE_AIR));
+}
+
+TEST(PrismAssist, WarningNeverChangesInputAndSafePathRequiresNoCorrection)
+{
+ PrismAssist::STrajectory aPaths[2];
+ aPaths[0].m_Count = aPaths[1].m_Count = 5;
+ aPaths[0].m_Direction = 0;
+ aPaths[1].m_Direction = 1;
+ aPaths[0].m_FirstHazard = 3;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 0, false, 1).m_Apply);
+ EXPECT_TRUE(PrismAssist::SelectCorrection(aPaths, 2, 0, false, 2).m_Apply);
+ aPaths[0].m_FirstHazard = -1;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 0, false, 2).m_Apply);
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 0, false, 0).m_Apply);
+}
+
+TEST(PrismAssist, ManualDirectionAndUnknownTilesBlockUnsafeIntervention)
+{
+ PrismAssist::STrajectory aPaths[3];
+ for(auto &Path : aPaths) Path.m_Count = 5;
+ aPaths[0].m_FirstHazard = 2;
+ aPaths[0].m_Direction = 0;
+ aPaths[1].m_Direction = -1;
+ aPaths[2].m_Direction = 1;
+ EXPECT_EQ(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Direction, 1);
+ EXPECT_TRUE(PrismAssist::SelectCorrection(aPaths, 3, -1, false).m_Apply);
+ aPaths[1].m_Unknown = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, -1, false).m_Apply);
+ aPaths[0].m_Unknown = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 0, false).m_Apply);
+}
+
+TEST(PrismAssist, TargetRetentionAndAimBounds)
+{
+ const PrismAssist::STargetCandidate aTargets[] = {{7, 100, 0.1f}, {9, 90, 0.2f}};
+ EXPECT_EQ(PrismAssist::SelectTarget(aTargets, 2, 7), 0);
+ EXPECT_EQ(PrismAssist::SelectTarget(aTargets, 2, -1), 1);
+ EXPECT_EQ(PrismAssist::SelectTarget(aTargets, 0, -1), -1);
+ EXPECT_TRUE(PrismAssist::WithinFov(vec2(1, 0), vec2(1, 0), pi / 2));
+ EXPECT_FALSE(PrismAssist::WithinFov(vec2(1, 0), vec2(0, 1), pi / 2));
+ const vec2 Output = PrismAssist::InterpolateAim(vec2(100, 0), vec2(-100, 0), 1.0f, pi / 6);
+ EXPECT_LE(std::abs(std::atan2(Output.y, Output.x)), pi / 6 + 0.001f);
+ EXPECT_EQ(PrismAssist::InterpolateAim(vec2(10, 0), vec2(0, 10), 0.0f, pi / 4), vec2(10, 0));
+}
 
 class PrismConfig : public ::testing::Test
 {

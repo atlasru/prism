@@ -350,10 +350,13 @@ int CControls::SnapInput(int *pData)
  if(Owned & PrismQol::OWN_HOOK) PrismComposedInput.m_Hook = 1;
  const bool Pulse = Allowed && GameClient()->m_PrismMacros.TakeFirePulse();
  PrismComposedInput.m_Fire = m_aPrismFire[Dummy].Compose(PrismComposedInput.m_Fire, Pulse, INPUT_STATE_MASK);
+	// Assist owns only aim and, when no directional owner exists, a safety correction.
+	GameClient()->PrismComposeAssist(PrismComposedInput, PrismComposedInput.m_Direction, PrismComposedInput.m_Jump != 0);
 	Send = Send || PrismComposedInput.m_Direction != m_aPrismLastOutput[Dummy].m_Direction;
 	Send = Send || PrismComposedInput.m_Jump != m_aPrismLastOutput[Dummy].m_Jump;
 	Send = Send || PrismComposedInput.m_Hook != m_aPrismLastOutput[Dummy].m_Hook;
 	Send = Send || PrismComposedInput.m_Fire != m_aPrismLastOutput[Dummy].m_Fire;
+	Send = Send || PrismComposedInput.m_TargetX != m_aPrismLastOutput[Dummy].m_TargetX || PrismComposedInput.m_TargetY != m_aPrismLastOutput[Dummy].m_TargetY;
 	// Preserve the DDNet physical input state and its original dummy-copy deltas.
 	m_aLastData[Dummy] = m_aInputData[Dummy];
 
