@@ -222,7 +222,6 @@ int CControls::SnapInput(int *pData)
 	}
 
 	bool Send = m_aLastData[g_Config.m_ClDummy].m_PlayerFlags != m_aInputData[g_Config.m_ClDummy].m_PlayerFlags;
-	CNetObj_PlayerInput PrismComposedInput = m_aInputData[g_Config.m_ClDummy];
 
 	m_aLastData[g_Config.m_ClDummy].m_PlayerFlags = m_aInputData[g_Config.m_ClDummy].m_PlayerFlags;
 
@@ -339,7 +338,7 @@ int CControls::SnapInput(int *pData)
  const bool Allowed = GameClient()->PrismInputAllowed();
  if(!Allowed)
   GameClient()->m_PrismMacros.Cancel();
- PrismComposedInput = m_aInputData[Dummy];
+	CNetObj_PlayerInput PrismComposedInput = m_aInputData[Dummy];
  const int Owned = Allowed ? GameClient()->m_PrismMacros.Owned() : 0;
  if(PrismComposedInput.m_Direction == 0)
  {
@@ -350,10 +349,8 @@ int CControls::SnapInput(int *pData)
  if(Owned & PrismQol::OWN_HOOK) PrismComposedInput.m_Hook = 1;
  const bool Pulse = Allowed && GameClient()->m_PrismMacros.TakeFirePulse();
  PrismComposedInput.m_Fire = m_aPrismFire[Dummy].Compose(PrismComposedInput.m_Fire, Pulse, INPUT_STATE_MASK);
-	// Read the current target after DDNet updates it from the mouse this tick.
-	PrismComposedInput.m_TargetX = m_aInputData[Dummy].m_TargetX;
-	PrismComposedInput.m_TargetY = m_aInputData[Dummy].m_TargetY;
-	// Assist owns aim, and bounded emergency movement when freeze is predicted.
+	// Assist reads the current physical input snapshot and owns only aim and
+	// bounded emergency movement when freeze is predicted.
 	GameClient()->PrismComposeAssist(PrismComposedInput, m_aInputData[Dummy].m_Direction,
 		m_aInputData[Dummy].m_Jump != 0, (Owned & (PrismQol::OWN_LEFT | PrismQol::OWN_RIGHT)) != 0);
 	Send = Send || PrismComposedInput.m_Direction != m_aPrismLastOutput[Dummy].m_Direction;
