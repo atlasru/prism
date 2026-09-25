@@ -573,12 +573,15 @@ bool CGameClient::PrismInputAllowed()
 void CGameClient::PrismEmergencyStop()
 {
 	g_Config.m_PrismDoubleEnabled = 0;
-	g_Config.m_PrismAimAssist = 0;
+	g_Config.m_PrismTriggerEnabled = 0;
 	g_Config.m_PrismFreezeAvoid = 0;
 	m_PrismHammerCounter = 0;
 	m_PrismMacros.Cancel();
-	m_PrismAimTargetId = -1;
-	m_PrismAimActive = false;
+	m_PrismTriggerTargetId = -1;
+	m_PrismTriggerHookOwned = false;
+	m_PrismTriggerLastTick = -1000;
+	m_PrismTriggerMatched = false;
+	m_PrismTriggerOutputActive = false;
 	m_PrismAssistPathCount = 0;
 	m_PrismAvoidJumpCooldown = 0;
 	m_PrismAvoidLastDirection = 0;
@@ -588,8 +591,11 @@ void CGameClient::PrismEmergencyStop()
 void CGameClient::OnDummySwap()
 {
 	m_PrismMacros.Cancel();
-	m_PrismAimTargetId = -1;
-	m_PrismAimActive = false;
+	m_PrismTriggerTargetId = -1;
+	m_PrismTriggerHookOwned = false;
+	m_PrismTriggerLastTick = -1000;
+	m_PrismTriggerMatched = false;
+	m_PrismTriggerOutputActive = false;
 	m_PrismAssistPathCount = 0;
 	m_PrismAvoidJumpCooldown = 0;
 	m_PrismAvoidLastDirection = 0;

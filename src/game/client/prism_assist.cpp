@@ -5,104 +5,108 @@
 #include <array>
 #include <cmath>
 
-void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump, bool MacroDirectionOwned)
+bool CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump, bool MacroDirectionOwned, bool MacroFirePulse, bool MacroHookOwned)
 {
-	if(!g_Config.m_PrismAimAssist && !g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismAimDebug && !g_Config.m_PrismFreezeDebug)
+	if(!g_Config.m_PrismTriggerEnabled && !g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismTriggerDebug && !g_Config.m_PrismFreezeDebug)
 	{
-		m_PrismAimTargetId = -1;
-		m_PrismAimActive = false;
-		m_PrismAimDebugReady = false;
+		m_PrismTriggerTargetId = -1;
+		m_PrismTriggerHookOwned = false;
+		m_PrismTriggerDebugReady = false;
+		m_PrismTriggerOutputActive = false;
 		m_PrismAssistPathCount = 0;
-		return;
+		return false;
 	}
 	if(!PrismInputAllowed() || m_Snap.m_LocalClientId < 0 || !m_Snap.m_pLocalCharacter)
 	{
-		m_PrismAimTargetId = -1;
-		m_PrismAimActive = false;
-		m_PrismAimDebugReady = false;
+		m_PrismTriggerTargetId = -1;
+		m_PrismTriggerHookOwned = false;
+		m_PrismTriggerDebugReady = false;
+		m_PrismTriggerOutputActive = false;
 		m_PrismAssistPathCount = 0;
-		return;
+		return false;
 	}
 	CGameWorld &World = m_PredictedWorld.GetCharacterById(m_Snap.m_LocalClientId) ? m_PredictedWorld : m_GameWorld;
 	CCharacter *pLocal = World.GetCharacterById(m_Snap.m_LocalClientId);
 	if(!pLocal)
 	{
-		m_PrismAimActive = false;
-		m_PrismAimDebugReady = false;
+		m_PrismTriggerTargetId = -1;
+		m_PrismTriggerHookOwned = false;
+		m_PrismTriggerDebugReady = false;
+		m_PrismTriggerOutputActive = false;
 		m_PrismAssistPathCount = 0;
-		return;
+		return false;
 	}
 	const CCharacterCore Local = pLocal->GetCore();
-	const bool PreviousAimActive = m_PrismAimActive;
-	m_PrismAimActive = false;
-	m_PrismAimDebugReady = true;
-	m_PrismAimCandidateCount = 0;
-	m_PrismAimDebugOrigin = Local.m_Pos;
-	m_PrismAimDebugDirection = vec2((float)Input.m_TargetX, (float)Input.m_TargetY);
-	if((g_Config.m_PrismAimAssist || g_Config.m_PrismAimDebug) && (!g_Config.m_PrismAimHookOnly || Input.m_Hook || g_Config.m_PrismAimDebug))
+	bool FirePulse = false;
+	m_PrismTriggerOutputActive = false;
+	m_PrismTriggerMatched = false;
+	m_PrismTriggerDebugReady = true;
+	m_PrismTriggerCandidateCount = 0;
+	m_PrismTriggerDebugOrigin = Local.m_Pos;
+	m_PrismTriggerDebugDirection = vec2((float)Input.m_TargetX, (float)Input.m_TargetY);
+	if(g_Config.m_PrismTriggerEnabled || g_Config.m_PrismTriggerDebug)
 	{
 		const vec2 Current((float)Input.m_TargetX, (float)Input.m_TargetY);
-		if(length(Current) > 0.001f)
+		std::array<PrismAssist::STargetCandidate, MAX_CLIENTS> aCandidates{};
+		std::array<vec2, MAX_CLIENTS> aPredicted{};
+		std::array<bool, MAX_CLIENTS> aMatched{};
+		int Count = 0;
+		const float Range = (float)g_Config.m_PrismTriggerRange;
+		const float Tolerance = g_Config.m_PrismTriggerTolerance * pi / 180.0f;
+		for(int Id = 0; Id < MAX_CLIENTS; ++Id)
 		{
-			std::array<PrismAssist::STargetCandidate, MAX_CLIENTS> aCandidates{};
-			int Count = 0;
-			const float MaxRange = (float)g_Config.m_PrismAimRange;
-			const float FovRadians = g_Config.m_PrismAimFov * pi / 180.0f;
-			for(int Id = 0; Id < MAX_CLIENTS; ++Id)
-			{
-				if(Id == m_aLocalIds[0] || Id == m_aLocalIds[1] || !m_Snap.m_aCharacters[Id].m_Active)
-					continue;
-				CCharacter *pTarget = World.GetCharacterById(Id);
-				if(!pTarget)
-					continue;
-				const CCharacterCore Target = pTarget->GetCore();
-				const vec2 Delta = Target.m_Pos - Local.m_Pos;
-				const float Distance = length(Delta);
-				vec2 CollisionPos, BeforeCollision;
-				const bool Visible = !Collision()->IntersectLine(Local.m_Pos, Target.m_Pos, &CollisionPos, &BeforeCollision);
-				if(!PrismAssist::EligibleTarget(Current, Delta, FovRadians, MaxRange, Visible))
-					continue;
-				++m_PrismAimCandidateCount;
-				const float Angle = std::abs(std::atan2(std::sin(std::atan2(Delta.y, Delta.x) - std::atan2(Current.y, Current.x)),
-						std::cos(std::atan2(Delta.y, Delta.x) - std::atan2(Current.y, Current.x))));
-				const float Score = g_Config.m_PrismAimTargetMode == 1 ? Distance :
-					g_Config.m_PrismAimTargetMode == 2 ? Angle * 500.0f : distance(Delta, Current);
-				aCandidates[Count++] = {Id, Score, Angle};
-			}
-			const int PreviousTarget = m_PrismAimTargetId;
-			const int Selected = PrismAssist::SelectTarget(aCandidates.data(), Count, PreviousTarget);
-			m_PrismAimTargetId = Selected >= 0 ? aCandidates[Selected].m_Id : -1;
-			if(m_PrismAimTargetId >= 0)
-			{
-				const CCharacterCore Target = World.GetCharacterById(m_PrismAimTargetId)->GetCore();
-				// Weapon-specific prediction is isolated here; hook leads target motion.
-				const float Lead = g_Config.m_PrismAimPrediction * (Input.m_Hook ? 1.0f : 0.5f);
-				m_PrismAimPredictedPos = Target.m_Pos + Target.m_Vel * Lead;
-				const vec2 Base = PreviousAimActive && PreviousTarget == m_PrismAimTargetId ? m_PrismAimOutput + Current - m_PrismAimLastManual : Current;
-				const vec2 Aim = PrismAssist::InterpolateAim(Base, m_PrismAimPredictedPos - Local.m_Pos,
-					g_Config.m_PrismAimStrength / 100.0f, FovRadians / 4.0f);
-				if(g_Config.m_PrismAimAssist && (!g_Config.m_PrismAimHookOnly || Input.m_Hook))
-				{
-					m_PrismAimOutput = Aim;
-					m_PrismAimLastManual = Current;
-					m_PrismAimActive = true;
-					Input.m_TargetX = round_to_int(Aim.x);
-					Input.m_TargetY = round_to_int(Aim.y);
-					if(!Input.m_TargetX && !Input.m_TargetY)
-						Input.m_TargetX = 1;
-				}
-			}
+			if(Id == m_aLocalIds[0] || Id == m_aLocalIds[1] || !m_Snap.m_aCharacters[Id].m_Active)
+				continue;
+			CCharacter *pTarget = World.GetCharacterById(Id);
+			if(!pTarget)
+				continue;
+			const CCharacterCore Target = pTarget->GetCore();
+			vec2 CollisionPos, BeforeCollision;
+			if(Collision()->IntersectLine(Local.m_Pos, Target.m_Pos, &CollisionPos, &BeforeCollision))
+				continue;
+			const vec2 Predicted = PrismAssist::PredictedTarget(Target.m_Pos, Target.m_Vel, g_Config.m_PrismTriggerPrediction);
+			const vec2 Delta = Predicted - Local.m_Pos;
+			if(length(Delta) < 1.0f || length(Delta) > Range ||
+				Collision()->IntersectLine(Local.m_Pos, Predicted, &CollisionPos, &BeforeCollision))
+				continue;
+			const bool Matched = PrismAssist::TriggerAligned(Current, Delta, Range, Tolerance, true);
+			const float Angle = std::abs(std::atan2(Current.x * Delta.y - Current.y * Delta.x,
+				Current.x * Delta.x + Current.y * Delta.y));
+			aCandidates[Count] = {Id, Angle * 500.0f + (Matched ? 0.0f : 10000.0f), Angle};
+			aPredicted[Count] = Predicted;
+			aMatched[Count] = Matched;
+			++Count;
 		}
+		m_PrismTriggerCandidateCount = Count;
+		const int Selected = PrismAssist::SelectTarget(aCandidates.data(), Count, m_PrismTriggerTargetId);
+		m_PrismTriggerTargetId = Selected >= 0 ? aCandidates[Selected].m_Id : -1;
+		if(Selected >= 0)
+		{
+			m_PrismTriggerPredictedPos = aPredicted[Selected];
+			m_PrismTriggerMatched = aMatched[Selected];
+		}
+		const int Tick = Client()->GameTick(g_Config.m_ClDummy);
+		const bool Ready = PrismAssist::TriggerReady(m_PrismTriggerMatched, Tick, m_PrismTriggerLastTick, g_Config.m_PrismTriggerCooldown);
+		const auto Trigger = PrismAssist::ComposeTrigger(Input, g_Config.m_PrismTriggerEnabled, m_PrismTriggerMatched,
+			Ready, g_Config.m_PrismTriggerAction, MacroFirePulse, MacroHookOwned, m_PrismTriggerHookOwned);
+		if(Trigger.m_FirePulse || Trigger.m_HookOwned && !m_PrismTriggerHookOwned)
+			m_PrismTriggerLastTick = Tick;
+		FirePulse = Trigger.m_FirePulse;
+		m_PrismTriggerOutputActive = FirePulse || Trigger.m_HookOwned;
+		m_PrismTriggerHookOwned = Trigger.m_HookOwned;
 	}
 	else
-		m_PrismAimTargetId = -1;
+	{
+		m_PrismTriggerTargetId = -1;
+		m_PrismTriggerHookOwned = false;
+	}
 
 	m_PrismAssistPathCount = 0;
 	m_PrismAssistSelected = 0;
 	m_PrismAvoidJumpCooldown = std::max(0, m_PrismAvoidJumpCooldown - 1);
 	if((!g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismFreezeDebug) || Local.m_Super || Local.m_Invincible || Local.m_IsInFreeze ||
 		!m_PrismPredictor.Begin(World, m_Snap.m_LocalClientId))
-		return;
+		return FirePulse;
 	const int Horizon = g_Config.m_PrismFreezeHorizon;
 	auto Simulate = [&](int Direction, bool Jump) {
 		if(m_PrismAssistPathCount >= PrismAssist::MAX_CANDIDATES)
@@ -120,7 +124,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	if(m_PrismAssistPathCount == 0 || m_aPrismAssistPaths[0].Safe() || m_aPrismAssistPaths[0].m_Unknown || g_Config.m_PrismFreezeAvoid != 2)
 	{
 		m_PrismAvoidLastDirection = 0;
-		return;
+		return FirePulse;
 	}
 	const bool CanJump = !Input.m_Jump && !ManualJump && !m_PrismAvoidJumpCooldown && Local.m_Jumps > Local.m_JumpedTotal;
 	if(CanJump)
@@ -158,11 +162,12 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	}
 	else
 		m_PrismAvoidLastDirection = 0;
+	return FirePulse;
 }
 
 void CGameClient::PrismRenderAssistDebug()
 {
-	if(!PrismInputAllowed() || (!g_Config.m_PrismFreezeDebug && !g_Config.m_PrismAimDebug && g_Config.m_PrismFreezeAvoid != 1))
+	if(!PrismInputAllowed() || (!g_Config.m_PrismFreezeDebug && !g_Config.m_PrismTriggerDebug && g_Config.m_PrismFreezeAvoid != 1))
 		return;
 	const ColorRGBA Accent = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismThemeAccent));
 	Graphics()->TextureClear();
@@ -193,51 +198,43 @@ void CGameClient::PrismRenderAssistDebug()
 			Graphics()->LinesDraw(aCross, 2);
 		}
 	}
-	if(g_Config.m_PrismAimDebug && m_PrismAimDebugReady)
+	if(g_Config.m_PrismTriggerDebug && m_PrismTriggerDebugReady)
 	{
-		const vec2 Origin = m_PrismAimDebugOrigin;
-		const vec2 Direction = normalize(m_PrismAimDebugDirection);
-		const float HalfAngle = g_Config.m_PrismAimFov * pi / 360.0f;
-		const float Range = (float)g_Config.m_PrismAimRange;
+		const vec2 Origin = m_PrismTriggerDebugOrigin;
+		const vec2 Direction = normalize(m_PrismTriggerDebugDirection);
+		const float HalfAngle = g_Config.m_PrismTriggerTolerance * pi / 180.0f;
+		const float Range = (float)g_Config.m_PrismTriggerRange;
 		const float Angle = std::atan2(Direction.y, Direction.x);
-		vec2 Previous = Origin + vec2(std::cos(Angle - HalfAngle), std::sin(Angle - HalfAngle)) * Range;
-		Graphics()->SetColor(Accent.WithAlpha(0.58f));
-		for(int i = 0; i <= 24; ++i)
+		Graphics()->SetColor(m_PrismTriggerMatched ? Accent.WithAlpha(0.95f) : Accent.WithAlpha(0.58f));
+		const IGraphics::CLineItem Ray(Origin, Origin + Direction * Range);
+		Graphics()->LinesDraw(&Ray, 1);
+		for(int i : {-1, 1})
 		{
-			const float A = Angle - HalfAngle + 2.0f * HalfAngle * i / 24;
+			const float A = Angle + HalfAngle * i;
 			const vec2 End = Origin + vec2(std::cos(A), std::sin(A)) * Range;
-			if(i == 0 || i == 24)
-			{
-				const IGraphics::CLineItem Edge(Origin, End);
-				Graphics()->LinesDraw(&Edge, 1);
-			}
-			if(i > 0)
-			{
-				const IGraphics::CLineItem Arc(Previous, End);
-				Graphics()->LinesDraw(&Arc, 1);
-			}
-			Previous = End;
+			Graphics()->SetColor(Accent.WithAlpha(0.3f));
+			const IGraphics::CLineItem Edge(Origin, End);
+			Graphics()->LinesDraw(&Edge, 1);
 		}
-		if(m_PrismAimTargetId >= 0)
+		if(m_PrismTriggerTargetId >= 0)
 		{
-			Graphics()->SetColor(Accent.WithAlpha(1.0f));
-			const IGraphics::CLineItem Aim(Origin, m_PrismAimPredictedPos);
-			Graphics()->LinesDraw(&Aim, 1);
+			Graphics()->SetColor(m_PrismTriggerMatched ? Accent.WithAlpha(1.0f) : ColorRGBA(0.65f, 0.73f, 0.81f, 0.9f));
 			for(const vec2 Offset : {vec2(-5.0f, -5.0f), vec2(-5.0f, 5.0f)})
 			{
-				const IGraphics::CLineItem Cross(m_PrismAimPredictedPos + Offset, m_PrismAimPredictedPos - Offset);
+				const IGraphics::CLineItem Cross(m_PrismTriggerPredictedPos + Offset, m_PrismTriggerPredictedPos - Offset);
 				Graphics()->LinesDraw(&Cross, 1);
 			}
 		}
 	}
 	Graphics()->LinesEnd();
 	Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
-	if(g_Config.m_PrismAimDebug && m_PrismAimDebugReady)
+	if(g_Config.m_PrismTriggerDebug && m_PrismTriggerDebugReady)
 	{
-		char aStatus[80];
-		str_format(aStatus, sizeof(aStatus), "Aim: %d in FOV  target: %d%s", m_PrismAimCandidateCount,
-			m_PrismAimTargetId, m_PrismAimActive ? "  correcting" : "");
-		TextRender()->Text(m_PrismAimDebugOrigin.x - 55, m_PrismAimDebugOrigin.y - 75, 9.0f, aStatus);
+		char aStatus[96];
+		str_format(aStatus, sizeof(aStatus), "Trigger %s: %s  target: %d  visible: %d%s",
+			g_Config.m_PrismTriggerAction ? "hook" : "fire", m_PrismTriggerMatched ? "ALIGNED" : "WAITING",
+			m_PrismTriggerTargetId, m_PrismTriggerCandidateCount, m_PrismTriggerOutputActive ? "  ACTIVE" : "");
+		TextRender()->Text(m_PrismTriggerDebugOrigin.x - 55, m_PrismTriggerDebugOrigin.y - 75, 9.0f, aStatus);
 	}
 	if(g_Config.m_PrismFreezeDebug && m_PrismAssistPathCount)
 	{

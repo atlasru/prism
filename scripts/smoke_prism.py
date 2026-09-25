@@ -74,11 +74,13 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     values = run([])
     for key, value in appearance.items():
         assert values.get(key) == value, (key, values)
-    values = run(['prism_aim_assist 1', 'prism_aim_hook_only 1',
-                  'prism_aim_fov 87', 'prism_aim_prediction 6',
+    values = run(['prism_trigger_enabled 1', 'prism_trigger_action 1',
+                  'prism_trigger_tolerance 7', 'prism_trigger_range 700',
+                  'prism_trigger_prediction 6', 'prism_trigger_cooldown 9',
                   'prism_freeze_avoid 2', 'prism_freeze_horizon 18'])
-    assist = {'prism_aim_assist': '1', 'prism_aim_hook_only': '1',
-              'prism_aim_fov': '87', 'prism_aim_prediction': '6',
+    assist = {'prism_trigger_enabled': '1', 'prism_trigger_action': '1',
+              'prism_trigger_tolerance': '7', 'prism_trigger_range': '700',
+              'prism_trigger_prediction': '6', 'prism_trigger_cooldown': '9',
               'prism_freeze_avoid': '2', 'prism_freeze_horizon': '18'}
     for key, value in assist.items():
         assert values.get(key) == value, (key, values)
@@ -86,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     for key, value in assist.items():
         assert values.get(key) == value, (key, values)
     values = run(['prism_emergency_stop'])
-    assert values.get('prism_aim_assist', '0') == '0', values
+    assert values.get('prism_trigger_enabled', '0') == '0', values
     assert values.get('prism_freeze_avoid', '0') == '0', values
     run(['prism_reset'])
 save_report()

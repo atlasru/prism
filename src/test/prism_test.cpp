@@ -2,6 +2,7 @@
 #include <game/client/prism.h>
 #include <game/client/prism_qol.h>
 #include <game/client/prism_assist.h>
+#include <game/client/prism_input.h>
 #include <engine/shared/console.h>
 #include <gtest/gtest.h>
 #include <climits>
@@ -150,6 +151,68 @@ TEST(PrismAssist, TargetRetentionAndAimBounds)
  const vec2 Output = PrismAssist::InterpolateAim(vec2(100, 0), vec2(-100, 0), 1.0f, pi / 6);
  EXPECT_LE(std::abs(std::atan2(Output.y, Output.x)), pi / 6 + 0.001f);
  EXPECT_EQ(PrismAssist::InterpolateAim(vec2(10, 0), vec2(0, 10), 0.0f, pi / 4), vec2(10, 0));
+}
+
+TEST(PrismTrigger, AlignmentPredictionRangeAndCooldown)
+{
+ const vec2 Aim(100, 0);
+ EXPECT_TRUE(PrismAssist::TriggerAligned(Aim, vec2(200, 0), 500, 0, true));
+ EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(200, 40), 500, 0, true));
+ EXPECT_TRUE(PrismAssist::TriggerAligned(Aim, vec2(200, 40), 500, 8 * pi / 180, true));
+ EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(600, 0), 500, pi / 6, true));
+ EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(-200, 0), 500, pi / 6, true));
+ EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(200, 0), 500, pi / 6, false));
+ EXPECT_EQ(PrismAssist::PredictedTarget(vec2(200, 0), vec2(0, 2), 5), vec2(200, 10));
+ EXPECT_FALSE(PrismAssist::TriggerReady(true, 103, 100, 6));
+ EXPECT_TRUE(PrismAssist::TriggerReady(true, 106, 100, 6));
+ EXPECT_FALSE(PrismAssist::TriggerReady(false, 106, 100, 6));
+ EXPECT_TRUE(PrismAssist::TriggerReady(true, 3, 2000, 6)); // tick reset
+}
+
+TEST(PrismTrigger, FireUsesComposerAndNeverSteersManualAim)
+{
+ CNetObj_PlayerInput Input{};
+ Input.m_TargetX = 200;
+ Input.m_TargetY = 15;
+ PrismInput::CFireComposer Composer;
+ Composer.Reset(0, INPUT_STATE_MASK);
+ const auto First = PrismAssist::ComposeTrigger(Input, true, true, true, 0, false, false, false);
+ EXPECT_TRUE(First.m_FirePulse);
+ const int Press = Composer.Compose(Input.m_Fire, First.m_FirePulse, INPUT_STATE_MASK);
+ EXPECT_EQ(Press & 1, 1);
+ EXPECT_EQ(Input.m_TargetX, 200);
+ EXPECT_EQ(Input.m_TargetY, 15);
+ EXPECT_EQ(Input.m_Hook, 0);
+ const auto Cooldown = PrismAssist::ComposeTrigger(Input, true, true, false, 0, false, false, false);
+ EXPECT_FALSE(Cooldown.m_FirePulse);
+ EXPECT_EQ(Composer.Compose(Input.m_Fire, Cooldown.m_FirePulse, INPUT_STATE_MASK) & 1, 0);
+ EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 0, true, false, false).m_FirePulse);
+ Input.m_Fire = 1;
+ EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 0, false, false, false).m_FirePulse);
+ EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, false, true, true, 0, false, false, false).m_FirePulse);
+ EXPECT_EQ(Input.m_TargetX, 200);
+ EXPECT_EQ(Input.m_TargetY, 15);
+}
+
+TEST(PrismTrigger, HookOwnershipAndManualPriority)
+{
+ CNetObj_PlayerInput Input{};
+ Input.m_TargetX = 170;
+ auto Output = PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, false, false);
+ EXPECT_TRUE(Output.m_HookOwned);
+ EXPECT_EQ(Input.m_Hook, 1);
+ Input.m_Hook = 0; // next physical input snapshot
+ Output = PrismAssist::ComposeTrigger(Input, true, true, false, 1, false, false, true);
+ EXPECT_TRUE(Output.m_HookOwned);
+ Input.m_Hook = 0;
+ Output = PrismAssist::ComposeTrigger(Input, true, false, false, 1, false, false, true);
+ EXPECT_FALSE(Output.m_HookOwned);
+ EXPECT_EQ(Input.m_Hook, 0);
+ Input.m_Hook = 1;
+ EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, false, false).m_HookOwned);
+ Input.m_Hook = 0;
+ EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, true, false).m_HookOwned);
+ EXPECT_EQ(Input.m_TargetX, 170);
 }
 
 class PrismConfig : public ::testing::Test

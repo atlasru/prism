@@ -328,16 +328,14 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     {
     case 7: // Bounded local prediction and input assistance
         Label("Assist   /   local prediction");
-        Toggle("Aim Assist", &g_Config.m_PrismAimAssist);
-        Toggle("Hook aim only", &g_Config.m_PrismAimHookOnly);
-        if(Button(g_Config.m_PrismAimTargetMode == 0 ? "Target: nearest crosshair" :
-                g_Config.m_PrismAimTargetMode == 1 ? "Target: nearest player" : "Target: lowest angle", 29))
-            g_Config.m_PrismAimTargetMode = (g_Config.m_PrismAimTargetMode + 1) % 3;
-        Slider("Aim FOV (degrees)", &g_Config.m_PrismAimFov, 5, 180);
-        Slider("Target range", &g_Config.m_PrismAimRange, 64, 1200);
-        Slider("Aim strength (%)", &g_Config.m_PrismAimStrength, 1, 100);
-        Slider("Lead target (ticks)", &g_Config.m_PrismAimPrediction, 0, 12);
-        Toggle("Aim prediction debug", &g_Config.m_PrismAimDebug);
+        Toggle("Trigger Bot", &g_Config.m_PrismTriggerEnabled);
+        if(Button(g_Config.m_PrismTriggerAction == 0 ? "Action: Fire" : "Action: Hook", 29))
+            g_Config.m_PrismTriggerAction = 1 - g_Config.m_PrismTriggerAction;
+        Slider("Aim tolerance (degrees)", &g_Config.m_PrismTriggerTolerance, 0, 15);
+        Slider("Target range", &g_Config.m_PrismTriggerRange, 64, 1200);
+        Slider("Lead target (ticks)", &g_Config.m_PrismTriggerPrediction, 0, 12);
+        Slider("Trigger cooldown (ticks)", &g_Config.m_PrismTriggerCooldown, 1, 50);
+        Toggle("Trigger debug", &g_Config.m_PrismTriggerDebug);
         Label("Freeze Avoid   /   only when needed");
         if(Button(g_Config.m_PrismFreezeAvoid == 0 ? "Freeze Avoid: Off" :
                 g_Config.m_PrismFreezeAvoid == 1 ? "Freeze Avoid: Warning" : "Freeze Avoid: Assist", 30))

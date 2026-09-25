@@ -114,8 +114,7 @@ float CPlayers::GetPlayerTargetAngle(
 		!GameClient()->m_Snap.m_SpecInfo.m_Active && Client()->State() != IClient::STATE_DEMOPLAYBACK)
 	{
 		// calculate what would be sent to the server from our current input
-		vec2 Direction = normalize(GameClient()->m_PrismAimActive && ClientId == GameClient()->m_Snap.m_LocalClientId ?
-			GameClient()->m_PrismAimOutput : GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy]);
+		vec2 Direction = normalize(GameClient()->m_Controls.m_aMousePos[g_Config.m_ClDummy]);
 
 		// fix direction if mouse is exactly in the center
 		if(Direction == vec2(0.0f, 0.0f))
