@@ -179,6 +179,7 @@ void CGameClient::PrismRenderAssistDebug()
 			const bool Dangerous = Path.m_aStates[j].m_Hazard;
 			Graphics()->SetColor(Dangerous ? ColorRGBA(1.0f, 0.28f, 0.20f, 0.9f) :
 				Path.m_aStates[j].m_Unknown ? ColorRGBA(1.0f, 0.75f, 0.24f, 0.75f) :
+				Path.m_aStates[j].m_NearHazard && i == 0 && g_Config.m_PrismFreezeDebug ? ColorRGBA(0.56f, 0.78f, 1.0f, 0.7f) :
 				i == m_PrismAssistSelected && i > 0 ? Accent.WithAlpha(0.85f) : Accent.WithAlpha(i ? 0.22f : 0.48f));
 			const IGraphics::CLineItem Line(Path.m_aStates[j - 1].m_Pos, Path.m_aStates[j].m_Pos);
 			Graphics()->LinesDraw(&Line, 1);
@@ -242,8 +243,9 @@ void CGameClient::PrismRenderAssistDebug()
 	{
 		const auto &Base = m_aPrismAssistPaths[0];
 		char aStatus[80];
-		str_format(aStatus, sizeof(aStatus), "Freeze: %s  %d ticks  candidates: %d",
+		str_format(aStatus, sizeof(aStatus), "Freeze: %s%s  %d ticks  candidates: %d",
 			PrismAssist::DebugStatus(Base),
+			Base.Safe() && Base.m_MinSafetyMargin < 16.0f ? " (CLOSE)" : "",
 			Base.m_Count - 1, m_PrismAssistPathCount);
 		TextRender()->Text(Base.m_aStates[0].m_Pos.x - 55, Base.m_aStates[0].m_Pos.y - 62, 9.0f, aStatus);
 	}

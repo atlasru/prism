@@ -76,6 +76,44 @@ TEST(PrismAssist, RawMapLayersClassifyFreezeAndDebugPath)
  EXPECT_STREQ(PrismAssist::DebugStatus(Path), "UNKNOWN");
 }
 
+TEST(PrismAssist, NarrowCorridorCenterSafeDespiteAdjacentFreeze)
+{
+ EXPECT_FALSE(PrismAssist::CenterHazard(TILE_AIR, TILE_AIR));
+ EXPECT_FALSE(PrismAssist::CornerHazard(TILE_FREEZE, TILE_AIR));
+ EXPECT_FALSE(PrismAssist::CornerHazard(TILE_AIR, TILE_DFREEZE));
+ EXPECT_TRUE(PrismAssist::CenterHazard(TILE_AIR, TILE_FREEZE));
+ EXPECT_TRUE(PrismAssist::CornerHazard(TILE_DEATH, TILE_AIR));
+ PrismAssist::STrajectory Corridor, Detour;
+ Corridor.m_Count = Detour.m_Count = 13;
+ Corridor.m_Direction = 1;
+ Corridor.m_MinSafetyMargin = 8.0f;
+ Corridor.m_aStates[5].m_NearHazard = true;
+ Detour.m_Direction = -1;
+ EXPECT_TRUE(Corridor.Safe());
+ EXPECT_STREQ(PrismAssist::DebugStatus(Corridor), "SAFE");
+ const PrismAssist::STrajectory aPaths[] = {Corridor, Detour};
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Apply);
+ EXPECT_LT(PrismAssist::ScoreTrajectory(Corridor), PrismAssist::ScoreTrajectory(Detour));
+}
+
+TEST(PrismAssist, FreezeImpactTriggersEmergencyButCorridorExitClearsIt)
+{
+ PrismAssist::STrajectory aPaths[3];
+ for(auto &Path : aPaths) Path.m_Count = 13;
+ aPaths[0].m_Direction = 1;
+ aPaths[0].m_FirstHazard = 7;
+ aPaths[1].m_Direction = 0;
+ aPaths[2].m_Direction = -1;
+ EXPECT_TRUE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+ aPaths[0].m_FirstHazard = -1;
+ aPaths[0].m_MinSafetyMargin = 8;
+ aPaths[0].m_aStates[7].m_NearHazard = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+ aPaths[0].m_MinSafetyMargin = 16;
+ aPaths[0].m_aStates[7].m_NearHazard = false;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+}
+
 TEST(PrismAssist, TargetAcquisitionRejectsRangeAngleAndBlockedLine)
 {
  const vec2 Aim(100, 0);

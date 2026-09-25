@@ -20,6 +20,9 @@ constexpr int MAX_PHASES = 3;
 inline int ClampHorizon(int Horizon) { return std::clamp(Horizon, 1, MAX_TICKS); }
 inline bool HazardTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE || Tile == TILE_DEATH; }
 inline bool HazardLayers(int Game, int Front) { return HazardTile(Game) || HazardTile(Front); }
+inline bool FreezeTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE; }
+inline bool CenterHazard(int Game, int Front) { return HazardLayers(Game, Front); }
+inline bool CornerHazard(int Game, int Front) { return Game == TILE_DEATH || Front == TILE_DEATH; }
 // GetCollisionAt returns only solid/death tiles. Freeze lives in the raw
 // game/front layers and must be sampled by index instead.
 inline bool HazardAt(const CCollision &Collision, vec2 Pos)
@@ -48,6 +51,7 @@ struct SState
 	int m_Jumped = 0;
 	int m_HookState = HOOK_IDLE;
 	bool m_Hazard = false;
+	bool m_NearHazard = false;
 	bool m_Unknown = false;
 };
 
@@ -106,13 +110,18 @@ class CPredictor
 
 	void Sample(vec2 Pos, bool &Hazard, bool &Unknown) const
 	{
+		// DDNet applies freeze at the character center. Its death check also
+		// samples corners. Treating neighboring freeze at corners as impact
+		// made traversable one-tile corridors appear unsafe.
+		const int CenterIndex = m_pCollision->GetPureMapIndex(Pos);
+		Hazard |= CenterHazard(m_pCollision->GetTileIndex(CenterIndex), m_pCollision->GetFrontTileIndex(CenterIndex));
 		const float Radius = CCharacterCore::PhysicalSize() / 3.0f;
 		for(float X : {-Radius, Radius})
 			for(float Y : {-Radius, Radius})
 			{
 				const vec2 P = Pos + vec2(X, Y);
-				Hazard |= HazardAt(*m_pCollision, P);
 				const int Index = m_pCollision->GetPureMapIndex(P);
+				Hazard |= CornerHazard(m_pCollision->GetTileIndex(Index), m_pCollision->GetFrontTileIndex(Index));
 				if(Index >= 0)
 					Unknown |= m_pCollision->IsTeleport(Index) || m_pCollision->IsEvilTeleport(Index) || m_pCollision->IsSpeedup(Index) || m_pCollision->IsTune(Index);
 			}
@@ -169,7 +178,6 @@ public:
 			Core.m_Input = Input;
 			Core.m_Input.m_Direction = std::clamp(pActions[Phase].m_Direction, -1, 1);
 			Core.m_Input.m_Jump = pActions[Phase].m_Jump && (Tick == 1 || Phase > 0 && Remaining == std::max(1, pActions[Phase].m_Ticks) - 1);
-			const vec2 Previous = Core.m_Pos;
 			Core.Tick(true);
 			Core.Move();
 			Core.Quantize();
@@ -179,10 +187,12 @@ public:
 			State.m_Tick = Tick;
 			State.m_Jumped = Core.m_Jumped;
 			State.m_HookState = Core.m_HookState;
-			for(int Step = 0; Step <= 4; ++Step)
-				Sample(mix(Previous, Core.m_Pos, Step / 4.0f), State.m_Hazard, State.m_Unknown);
+			// DDNet processes tile effects at the new tick position. Sweeping
+			// corners across freeze tiles creates false positives in corridors.
+			Sample(Core.m_Pos, State.m_Hazard, State.m_Unknown);
 			Out.m_Count = Tick + 1;
-			if(NearHazard(State.m_Pos))
+			State.m_NearHazard = NearHazard(State.m_Pos);
+			if(State.m_NearHazard)
 				Out.m_MinSafetyMargin = 8.0f;
 			Out.m_Unknown |= State.m_Unknown;
 			if(State.m_Hazard && Out.m_FirstHazard == -1)
