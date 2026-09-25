@@ -59,8 +59,15 @@ def main():
     sources = {name: sha256(ROOT / name) for name in tracked if name and (ROOT / name).is_file()}
     output = ROOT / 'dist'
     output.mkdir(exist_ok=True)
-    run_suffix = f"-{os.environ['GITHUB_RUN_ID']}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}" if 'GITHUB_RUN_ID' in os.environ else ''
-    filename = f'prism-visual-overhaul-windows-x64-{commit[:12]}{run_suffix}.zip'
+    version_header = (ROOT / 'src' / 'game' / 'client' / 'prism_version.h').read_text()
+    version = version_header.split('PRISM_VERSION "', 1)[1].split('"', 1)[0]
+    release_version = os.environ.get('PRISM_RELEASE_VERSION')
+    if release_version:
+        assert version == release_version, f'Release version {release_version} differs from source version {version}'
+        filename = f'Prism-v{version}-windows-x64.zip'
+    else:
+        run_suffix = f"-{os.environ['GITHUB_RUN_ID']}-{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}" if 'GITHUB_RUN_ID' in os.environ else ''
+        filename = f'prism-windows-x64-{version}-{commit[:12]}{run_suffix}.zip'
     artifact = output / filename
     if artifact.exists():
         raise FileExistsError(f'Refusing to overwrite existing artifact: {artifact}')
@@ -82,7 +89,7 @@ def main():
                     target = package / 'licenses' / path.relative_to(ROOT)
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, target)
-        info = {'project': 'Prism', 'version': '0.1.0', 'commit': commit,
+        info = {'project': 'Prism', 'version': version, 'commit': commit,
                 'upstream': 'a5a61806e434ef22141b622db989087fbba8ed21',
                 'source_sha256': sources,
                 'configuration': 'Release',
