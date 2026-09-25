@@ -1,0 +1,156 @@
+name: Prism Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/game/client/prism_version.h
+      - CHANGELOG.md
+      - RELEASE_NOTES.md
+      - scripts/package_prism.py
+      - .github/workflows/prism-release.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prism-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.meta.outputs.publish }}
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: meta
+        name: Resolve release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^#define PRISM_VERSION "\([^"]*\)"/\1/p' src/game/client/prism_version.h)"
+          if [[ -z "$version" ]]; then
+            echo "Unable to read PRISM_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+          if [[ "$version" == *-dev* ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Development version; no release will be published."
+            exit 0
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Tag v$version already exists; skipping."
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [Release, Debug]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify triggering revision
+        shell: pwsh
+        run: |
+          $actual = (git rev-parse HEAD).Trim()
+          if ($actual -ne '${{ github.sha }}') { throw "Unexpected checkout: $actual" }
+          git diff --exit-code
+          git submodule status --recursive
+          New-Item -ItemType Directory -Force build | Out-Null
+          $actual | Set-Content build/TESTED_COMMIT.txt
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_${{ matrix.configuration == 'Release' && 'RELEASE' || 'DEBUG' }}=. -DDOWNLOAD_GTEST=ON -DCLIENT=ON -DSERVER=ON -DTOOLS=OFF -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF -DTESTRUNNER_ARGS=--gtest_output=xml:tests.xml
+
+      - name: Build client and tests
+        run: cmake --build build --config ${{ matrix.configuration }} --target game-client testrunner --parallel 4
+
+      - name: Run tests
+        run: cmake --build build --config ${{ matrix.configuration }} --target run_tests
+
+      - name: Package
+        if: matrix.configuration == 'Release'
+        run: cmake --build build --config Release --target package_default
+
+      - name: Verify release distribution
+        if: matrix.configuration == 'Release'
+        env:
+          PRISM_EXPECTED_COMMIT: ${{ github.sha }}
+          PRISM_RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: python scripts/package_prism.py build
+
+      - name: Packaged client smoke
+        if: matrix.configuration == 'Release'
+        run: python scripts/smoke_prism.py build/verified-package/Prism
+
+      - name: Upload release assets
+        if: matrix.configuration == 'Release' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-release-${{ needs.prepare.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Preserve test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prism-release-tests-${{ matrix.configuration }}-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/TESTED_COMMIT.txt
+            build/tests.xml
+            build/CMakeFiles/CMakeConfigureLog.yaml
+            dist/runtime-smoke.json
+          if-no-files-found: warn
+
+  publish:
+    needs: [prepare, validate]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prism-release-${{ needs.prepare.outputs.version }}
+          path: release-assets
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Prism $TAG" \
+            --notes-file RELEASE_NOTES.md
