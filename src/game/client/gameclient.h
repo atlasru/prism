@@ -186,7 +186,11 @@ public:
 	vec2 m_PrismAimOutput = vec2(0, 0);
 	vec2 m_PrismAimLastManual = vec2(0, 0);
 	bool m_PrismAimActive = false;
-	void PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump);
+	bool m_PrismAimDebugReady = false;
+	int m_PrismAimCandidateCount = 0;
+	vec2 m_PrismAimDebugOrigin = vec2(0, 0);
+	vec2 m_PrismAimDebugDirection = vec2(1, 0);
+	void PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirection, bool ManualJump, bool MacroDirectionOwned);
 	void PrismRenderAssistDebug();
 	bool m_aPrismLastAssisted[NUM_DUMMIES] = {};
 	int m_PrismHammerCounter = 0;

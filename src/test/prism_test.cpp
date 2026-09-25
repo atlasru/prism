@@ -33,20 +33,57 @@ TEST(PrismAssist, WarningNeverChangesInputAndSafePathRequiresNoCorrection)
  EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 0, false, 0).m_Apply);
 }
 
-TEST(PrismAssist, ManualDirectionAndUnknownTilesBlockUnsafeIntervention)
+TEST(PrismAssist, HeldDirectionCanBeOverriddenOnlyForPredictedDanger)
 {
  PrismAssist::STrajectory aPaths[3];
  for(auto &Path : aPaths) Path.m_Count = 5;
  aPaths[0].m_FirstHazard = 2;
- aPaths[0].m_Direction = 0;
- aPaths[1].m_Direction = -1;
- aPaths[2].m_Direction = 1;
- EXPECT_EQ(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Direction, 1);
- EXPECT_TRUE(PrismAssist::SelectCorrection(aPaths, 3, -1, false).m_Apply);
+ aPaths[0].m_Direction = 1;
+ aPaths[1].m_Direction = 0;
+ aPaths[2].m_Direction = -1;
+ const auto Emergency = PrismAssist::SelectCorrection(aPaths, 3, 1, false);
+ ASSERT_TRUE(Emergency.m_Apply);
+ EXPECT_EQ(Emergency.m_Direction, 0);
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 0, false, 2, true).m_Apply);
+ aPaths[0].m_FirstHazard = -1;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+ aPaths[0].m_FirstHazard = 2;
  aPaths[1].m_Unknown = true;
- EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, -1, false).m_Apply);
+ EXPECT_EQ(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Direction, -1);
  aPaths[0].m_Unknown = true;
- EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 0, false).m_Apply);
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+ aPaths[0].m_Unknown = false;
+ aPaths[2].m_Unknown = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, RawMapLayersClassifyFreezeAndDebugPath)
+{
+ EXPECT_TRUE(PrismAssist::HazardLayers(TILE_FREEZE, TILE_AIR));
+ EXPECT_TRUE(PrismAssist::HazardLayers(TILE_AIR, TILE_DFREEZE));
+ EXPECT_FALSE(PrismAssist::HazardLayers(TILE_SOLID, TILE_AIR));
+ PrismAssist::STrajectory Path;
+ EXPECT_STREQ(PrismAssist::DebugStatus(Path), "NO PREDICTION");
+ Path.m_Count = 5;
+ Path.m_aStates[0].m_Pos = vec2(32, 32);
+ Path.m_aStates[4].m_Pos = vec2(56, 32);
+ EXPECT_EQ(Path.m_Count - 1, 4);
+ EXPECT_GT(distance(Path.m_aStates[0].m_Pos, Path.m_aStates[4].m_Pos), 0);
+ EXPECT_STREQ(PrismAssist::DebugStatus(Path), "SAFE");
+ Path.m_FirstHazard = 3;
+ EXPECT_STREQ(PrismAssist::DebugStatus(Path), "DANGER");
+ Path.m_Unknown = true;
+ EXPECT_STREQ(PrismAssist::DebugStatus(Path), "UNKNOWN");
+}
+
+TEST(PrismAssist, TargetAcquisitionRejectsRangeAngleAndBlockedLine)
+{
+ const vec2 Aim(100, 0);
+ EXPECT_TRUE(PrismAssist::EligibleTarget(Aim, vec2(100, 10), pi / 2, 200, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Aim, vec2(100, 10), pi / 2, 80, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Aim, vec2(0, 100), pi / 2, 200, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Aim, vec2(100, 10), pi / 2, 200, false));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Aim, vec2(0, 0), pi / 2, 200, true));
 }
 
 TEST(PrismAssist, TrajectoryScoreRewardsSafetyAndDesiredLanding)

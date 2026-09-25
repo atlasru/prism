@@ -19,6 +19,14 @@ constexpr int MAX_CANDIDATES = 7;
 constexpr int MAX_PHASES = 3;
 inline int ClampHorizon(int Horizon) { return std::clamp(Horizon, 1, MAX_TICKS); }
 inline bool HazardTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE || Tile == TILE_DEATH; }
+inline bool HazardLayers(int Game, int Front) { return HazardTile(Game) || HazardTile(Front); }
+// GetCollisionAt returns only solid/death tiles. Freeze lives in the raw
+// game/front layers and must be sampled by index instead.
+inline bool HazardAt(const CCollision &Collision, vec2 Pos)
+{
+	const int Index = Collision.GetPureMapIndex(Pos);
+	return HazardLayers(Collision.GetTileIndex(Index), Collision.GetFrontTileIndex(Index));
+}
 inline bool WithinFov(vec2 Direction, vec2 Target, float FovRadians)
 {
 	if(length(Direction) < 0.001f || length(Target) < 0.001f)
@@ -26,6 +34,10 @@ inline bool WithinFov(vec2 Direction, vec2 Target, float FovRadians)
 	const float Delta = std::atan2(std::sin(std::atan2(Target.y, Target.x) - std::atan2(Direction.y, Direction.x)),
 		std::cos(std::atan2(Target.y, Target.x) - std::atan2(Direction.y, Direction.x)));
 	return std::abs(Delta) <= FovRadians / 2.0f;
+}
+inline bool EligibleTarget(vec2 Aim, vec2 Delta, float FovRadians, float MaxRange, bool Visible)
+{
+	return Visible && length(Delta) >= 1.0f && length(Delta) <= MaxRange && WithinFov(Aim, Delta, FovRadians);
 }
 
 struct SState
@@ -59,6 +71,15 @@ struct STrajectory
 	bool Safe() const { return m_Count > 0 && m_FirstHazard == -1 && !m_Unknown; }
 };
 
+inline const char *DebugStatus(const STrajectory &Path)
+{
+	if(!Path.m_Count)
+		return "NO PREDICTION";
+	if(Path.m_Unknown)
+		return "UNKNOWN";
+	return Path.m_FirstHazard >= 0 ? "DANGER" : "SAFE";
+}
+
 inline float ScoreTrajectory(const STrajectory &Path, vec2 DesiredPos = vec2(0, 0), float DesiredWeight = 0.0f)
 {
 	if(Path.m_Unknown)
@@ -90,10 +111,8 @@ class CPredictor
 			for(float Y : {-Radius, Radius})
 			{
 				const vec2 P = Pos + vec2(X, Y);
-				const int Tile = m_pCollision->GetCollisionAt(P.x, P.y);
-				const int Front = m_pCollision->GetFrontCollisionAt(P.x, P.y);
-				Hazard |= HazardTile(Tile) || HazardTile(Front);
-				const int Index = m_pCollision->GetMapIndex(P);
+				Hazard |= HazardAt(*m_pCollision, P);
+				const int Index = m_pCollision->GetPureMapIndex(P);
 				if(Index >= 0)
 					Unknown |= m_pCollision->IsTeleport(Index) || m_pCollision->IsEvilTeleport(Index) || m_pCollision->IsSpeedup(Index) || m_pCollision->IsTune(Index);
 			}
@@ -103,8 +122,7 @@ class CPredictor
 		const float Radius = CCharacterCore::PhysicalSize() / 3.0f + 8.0f;
 		for(float X : {-Radius, Radius})
 			for(float Y : {-Radius, Radius})
-				if(HazardTile(m_pCollision->GetCollisionAt(Pos.x + X, Pos.y + Y)) ||
-					HazardTile(m_pCollision->GetFrontCollisionAt(Pos.x + X, Pos.y + Y)))
+				if(HazardAt(*m_pCollision, Pos + vec2(X, Y)))
 					return true;
 		return false;
 	}
@@ -185,7 +203,7 @@ struct SCorrection
 	int m_Selected = 0;
 };
 
-inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int ManualDirection, bool ManualJump, int Mode = 2)
+inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int ManualDirection, bool ManualJump, int Mode = 2, bool MacroDirectionOwned = false)
 {
 	SCorrection Result;
 	if(Mode != 2 || !pPaths || Count < 2 || pPaths[0].Safe() || pPaths[0].m_Unknown)
@@ -194,9 +212,13 @@ inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int Ma
 	for(int i = 1; i < std::min(Count, MAX_CANDIDATES); ++i)
 	{
 		const auto &Path = pPaths[i];
-		if(!Path.Safe() || ManualDirection && Path.m_Direction != ManualDirection || ManualJump && !Path.m_Jump)
+		if(!Path.Safe() || ManualJump && !Path.m_Jump || MacroDirectionOwned && Path.m_Direction != pPaths[0].m_Direction)
 			continue;
-		const int Cost = (Path.m_Direction != pPaths[0].m_Direction ? 2 : 0) + (Path.m_Jump != pPaths[0].m_Jump ? 1 : 0);
+		// A held direction may be overridden only for a safe outcome. Prefer
+		// preserving it, then a short jump, then braking, then reversal.
+		const int Cost = (Path.m_Direction == pPaths[0].m_Direction ? 0 :
+			Path.m_Direction == 0 ? 2 : Path.m_Direction == -ManualDirection ? 4 : 3) +
+			(Path.m_Jump != pPaths[0].m_Jump ? 1 : 0);
 		if(Cost < BestCost || Cost == BestCost && (Result.m_Selected == 0 || Path.m_Score > pPaths[Result.m_Selected].m_Score))
 		{
 			BestCost = Cost;
