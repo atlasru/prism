@@ -181,6 +181,9 @@ public:
 	int m_PrismAssistSelected = 0;
 	int m_PrismAvoidJumpCooldown = 0;
 	int m_PrismAvoidLastDirection = 0;
+	bool m_PrismAvoidHookOwned = false;
+	vec2 m_PrismAvoidHookPoint = vec2(0, 0);
+	int m_PrismAvoidHookCandidateCount = 0;
 	int m_PrismHookTargetId = -1;
 	bool m_PrismHookActive = false;
 	bool m_PrismHookDebugReady = false;

@@ -15,7 +15,8 @@
 namespace PrismAssist
 {
 constexpr int MAX_TICKS = 24;
-constexpr int MAX_CANDIDATES = 7;
+constexpr int MAX_CANDIDATES = 14;
+constexpr int MAX_HOOK_CANDIDATES = 6;
 constexpr int MAX_PHASES = 3;
 inline int ClampHorizon(int Horizon) { return std::clamp(Horizon, 1, MAX_TICKS); }
 inline bool HazardTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE || Tile == TILE_DEATH; }
@@ -23,6 +24,7 @@ inline bool HazardLayers(int Game, int Front) { return HazardTile(Game) || Hazar
 inline bool FreezeTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE; }
 inline bool CenterHazard(int Game, int Front) { return HazardLayers(Game, Front); }
 inline bool CornerHazard(int Game, int Front) { return Game == TILE_DEATH || Front == TILE_DEATH; }
+inline bool HookableImpact(int Tile, int Tele) { return Tile == TILE_SOLID && Tele == 0; }
 // GetCollisionAt returns only solid/death tiles. Freeze lives in the raw
 // game/front layers and must be sampled by index instead.
 inline bool HazardAt(const CCollision &Collision, vec2 Pos)
@@ -54,6 +56,8 @@ struct SState
 	int m_Tick = 0;
 	int m_Jumped = 0;
 	int m_HookState = HOOK_IDLE;
+	vec2 m_HookPos = vec2(0, 0);
+	bool m_HookAttached = false;
 	bool m_Hazard = false;
 	bool m_NearHazard = false;
 	bool m_Unknown = false;
@@ -64,6 +68,8 @@ struct SAction
 	int m_Direction = 0;
 	bool m_Jump = false;
 	int m_Ticks = 1;
+	bool m_Hook = false;
+	vec2 m_HookAim = vec2(0, 0);
 };
 
 struct STrajectory
@@ -76,6 +82,9 @@ struct STrajectory
 	float m_MinSafetyMargin = 16.0f;
 	int m_Direction = 0;
 	bool m_Jump = false;
+	bool m_Hook = false;
+	bool m_HookAttached = false;
+	vec2 m_HookPoint = vec2(0, 0);
 	bool Safe() const { return m_Count > 0 && m_FirstHazard == -1 && !m_Unknown; }
 };
 
@@ -168,8 +177,10 @@ public:
 		Core.SetCoreWorld(&m_World, m_pCollision, m_pTeams);
 		m_World.m_apCharacters[m_LocalId] = &Core;
 		Out.m_Count = 1;
+		Out.m_Hook = pActions[0].m_Hook;
 		Out.m_aStates[0].m_Pos = Core.m_Pos;
 		Out.m_aStates[0].m_Vel = Core.m_Vel;
+		Out.m_aStates[0].m_HookPos = Core.m_HookPos;
 		int Phase = 0;
 		int Remaining = std::max(1, pActions[0].m_Ticks);
 		for(int Tick = 1; Tick <= Horizon; ++Tick)
@@ -182,6 +193,14 @@ public:
 			Core.m_Input = Input;
 			Core.m_Input.m_Direction = std::clamp(pActions[Phase].m_Direction, -1, 1);
 			Core.m_Input.m_Jump = pActions[Phase].m_Jump && (Tick == 1 || Phase > 0 && Remaining == std::max(1, pActions[Phase].m_Ticks) - 1);
+			if(pActions[Phase].m_Hook)
+			{
+				Core.m_Input.m_Hook = 1;
+				Core.m_Input.m_TargetX = round_to_int(pActions[Phase].m_HookAim.x);
+				Core.m_Input.m_TargetY = round_to_int(pActions[Phase].m_HookAim.y);
+			}
+			else if(Out.m_Hook)
+				Core.m_Input.m_Hook = 0;
 			Core.Tick(true);
 			Core.Move();
 			Core.Quantize();
@@ -191,6 +210,9 @@ public:
 			State.m_Tick = Tick;
 			State.m_Jumped = Core.m_Jumped;
 			State.m_HookState = Core.m_HookState;
+			State.m_HookPos = Core.m_HookPos;
+			State.m_HookAttached = Core.m_HookState == HOOK_GRABBED && Core.HookedPlayer() == -1;
+			Out.m_HookAttached |= State.m_HookAttached;
 			// DDNet processes tile effects at the new tick position. Sweeping
 			// corners across freeze tiles creates false positives in corridors.
 			Sample(Core.m_Pos, State.m_Hazard, State.m_Unknown);
@@ -215,6 +237,8 @@ struct SCorrection
 	int m_Direction = 0;
 	bool m_Jump = false;
 	int m_Selected = 0;
+	bool m_Hook = false;
+	vec2 m_HookPoint = vec2(0, 0);
 };
 
 inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int ManualDirection, bool ManualJump, int Mode = 2, bool MacroDirectionOwned = false)
@@ -226,17 +250,17 @@ inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int Ma
 	for(int i = 1; i < std::min(Count, MAX_CANDIDATES); ++i)
 	{
 		const auto &Path = pPaths[i];
-		if(!Path.Safe() || ManualJump && !Path.m_Jump || MacroDirectionOwned && Path.m_Direction != pPaths[0].m_Direction)
+		if(!Path.Safe() || Path.m_Hook && !Path.m_HookAttached || ManualJump && !Path.m_Jump || MacroDirectionOwned && Path.m_Direction != pPaths[0].m_Direction)
 			continue;
-		// A held direction may be overridden only for a safe outcome. Prefer
-		// preserving it, then a short jump, then braking, then reversal.
+		// A held direction is preserved for safe forward hook recovery. A
+		// successful jump is cheaper; braking/reversal remain fallback actions.
 		const int Cost = (Path.m_Direction == pPaths[0].m_Direction ? 0 :
-			Path.m_Direction == 0 ? 2 : Path.m_Direction == -ManualDirection ? 4 : 3) +
-			(Path.m_Jump != pPaths[0].m_Jump ? 1 : 0);
+			Path.m_Direction == 0 ? 3 : Path.m_Direction == -ManualDirection ? 5 : 4) +
+			(Path.m_Jump != pPaths[0].m_Jump ? 1 : 0) + (Path.m_Hook ? 2 : 0);
 		if(Cost < BestCost || Cost == BestCost && (Result.m_Selected == 0 || Path.m_Score > pPaths[Result.m_Selected].m_Score))
 		{
 			BestCost = Cost;
-			Result = {true, Path.m_Direction, Path.m_Jump, i};
+			Result = {true, Path.m_Direction, Path.m_Jump, i, Path.m_Hook, Path.m_HookPoint};
 		}
 	}
 	return Result;

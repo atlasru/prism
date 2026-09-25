@@ -16,12 +16,14 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	if(!g_Config.m_PrismHookAssist && !g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismHookDebug && !g_Config.m_PrismFreezeDebug)
 	{
 		m_PrismAssistPathCount = 0;
+		m_PrismAvoidHookOwned = false;
 		return;
 	}
 	if(!PrismInputAllowed() || m_Snap.m_LocalClientId < 0 || !m_Snap.m_pLocalCharacter)
 	{
 		m_PrismHookTargetId = -1;
 		m_PrismAssistPathCount = 0;
+		m_PrismAvoidHookOwned = false;
 		return;
 	}
 	CGameWorld &World = m_PredictedWorld.GetCharacterById(m_Snap.m_LocalClientId) ? m_PredictedWorld : m_GameWorld;
@@ -30,6 +32,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	{
 		m_PrismHookTargetId = -1;
 		m_PrismAssistPathCount = 0;
+		m_PrismAvoidHookOwned = false;
 		return;
 	}
 	const CCharacterCore Local = pLocal->GetCore();
@@ -87,20 +90,30 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	}
 	m_PrismAssistPathCount = 0;
 	m_PrismAssistSelected = 0;
+	m_PrismAvoidHookCandidateCount = 0;
 	m_PrismAvoidJumpCooldown = std::max(0, m_PrismAvoidJumpCooldown - 1);
 	if((!g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismFreezeDebug) || Local.m_Super || Local.m_Invincible || Local.m_IsInFreeze ||
 		!m_PrismPredictor.Begin(World, m_Snap.m_LocalClientId))
+	{
+		m_PrismAvoidHookOwned = false;
 		return;
+	}
 	const int Horizon = g_Config.m_PrismFreezeHorizon;
-	auto Simulate = [&](int Direction, bool Jump) {
+	auto Simulate = [&](int Direction, bool Jump, const vec2 *pHookPoint = nullptr) {
 		if(m_PrismAssistPathCount >= PrismAssist::MAX_CANDIDATES)
 			return;
 		auto &Path = m_aPrismAssistPaths[m_PrismAssistPathCount];
-		const PrismAssist::SAction Action{Direction, Jump, Horizon};
+		PrismAssist::SAction Action{Direction, Jump, Horizon};
+		if(pHookPoint)
+		{
+			Action.m_Hook = true;
+			Action.m_HookAim = *pHookPoint - Local.m_Pos;
+		}
 		if(m_PrismPredictor.Simulate(Input, &Action, 1, Horizon, Path))
 		{
 			Path.m_Direction = Direction;
 			Path.m_Jump = Jump;
+			Path.m_HookPoint = pHookPoint ? *pHookPoint : vec2(0, 0);
 			++m_PrismAssistPathCount;
 		}
 	};
@@ -108,6 +121,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	if(m_PrismAssistPathCount == 0 || m_aPrismAssistPaths[0].Safe() || m_aPrismAssistPaths[0].m_Unknown || g_Config.m_PrismFreezeAvoid != 2)
 	{
 		m_PrismAvoidLastDirection = 0;
+		m_PrismAvoidHookOwned = false;
 		return;
 	}
 	const bool CanJump = !Input.m_Jump && !ManualJump && !m_PrismAvoidJumpCooldown && Local.m_Jumps > Local.m_JumpedTotal;
@@ -125,14 +139,62 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 				if(Direction != Input.m_Direction && !MacroDirectionOwned)
 					Simulate(Direction, true);
 	}
+	// Search only after a concrete hazard. Raycasts use the same hook collision
+	// primitive as DDNet's core; reject teleports, blockers and duplicate faces.
+	// Retain an active point first so a useful recovery is not retargeted each tick.
+	if(!MacroHookOwned && (Local.m_HookState == HOOK_IDLE || m_PrismAvoidHookOwned))
+	{
+		std::array<vec2, PrismAssist::MAX_HOOK_CANDIDATES> aPoints{};
+		int Points = 0;
+		auto AddPoint = [&](vec2 Point) {
+			if(Points >= (int)aPoints.size() || distance(Local.m_Pos, Point) < 48.0f)
+				return;
+			for(int i = 0; i < Points; ++i)
+				if(distance(aPoints[i], Point) < 20.0f)
+					return;
+			aPoints[Points++] = Point;
+		};
+		if(m_PrismAvoidHookOwned && Local.m_HookState == HOOK_GRABBED && Local.HookedPlayer() == -1)
+			AddPoint(Local.m_HookPos);
+		else if(m_PrismAvoidHookOwned)
+			AddPoint(m_PrismAvoidHookPoint);
+		const int Travel = ManualDirection ? ManualDirection : Local.m_Vel.x < 0 ? -1 : 1;
+		constexpr float aAngles[] = {0, -pi / 6, pi / 6, -pi / 3, pi / 3, -pi / 2, pi / 2, -2 * pi / 3, 2 * pi / 3, pi};
+		for(float Angle : aAngles)
+		{
+			if(Points >= (int)aPoints.size())
+				break;
+			const vec2 Ray(std::cos(Angle) * Travel, std::sin(Angle));
+			vec2 Hit, Before;
+			int Tele = 0;
+			const int Tile = Collision()->IntersectLineTeleHook(Local.m_Pos,
+				Local.m_Pos + Ray * (float)Local.m_Tuning.m_HookLength, &Hit, &Before, &Tele);
+			if(PrismAssist::HookableImpact(Tile, Tele))
+				AddPoint(Hit);
+		}
+		m_PrismAvoidHookCandidateCount = Points;
+		for(int i = 0; i < Points; ++i)
+			Simulate(Input.m_Direction, Input.m_Jump != 0, &aPoints[i]);
+	}
 	auto Correction = PrismAssist::SelectCorrection(m_aPrismAssistPaths.data(), m_PrismAssistPathCount, ManualDirection, ManualJump, 2, MacroDirectionOwned);
-	if(Correction.m_Apply && m_PrismAvoidLastDirection && Correction.m_Direction != m_PrismAvoidLastDirection)
+	if(Correction.m_Apply && !Correction.m_Hook && m_PrismAvoidLastDirection && Correction.m_Direction != m_PrismAvoidLastDirection)
 		for(int i = 1; i < m_PrismAssistPathCount; ++i)
-			if(m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_Direction == m_PrismAvoidLastDirection &&
+			if(!m_aPrismAssistPaths[i].m_Hook && m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_Direction == m_PrismAvoidLastDirection &&
 				m_aPrismAssistPaths[i].m_Jump == Correction.m_Jump)
 			{
 				Correction.m_Direction = m_PrismAvoidLastDirection;
 				Correction.m_Selected = i;
+				break;
+			}
+	if(Correction.m_Apply && m_PrismAvoidHookOwned &&
+		(Correction.m_Hook || Correction.m_Direction != Input.m_Direction))
+		for(int i = 1; i < m_PrismAssistPathCount; ++i)
+			if(m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_HookAttached &&
+				distance(m_aPrismAssistPaths[i].m_HookPoint, m_PrismAvoidHookPoint) < 20.0f &&
+				m_aPrismAssistPaths[i].m_Direction == Input.m_Direction)
+			{
+				Correction = {true, m_aPrismAssistPaths[i].m_Direction, m_aPrismAssistPaths[i].m_Jump, i,
+					true, m_aPrismAssistPaths[i].m_HookPoint};
 				break;
 			}
 	if(Correction.m_Apply)
@@ -143,9 +205,23 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 		m_PrismAvoidLastDirection = Correction.m_Direction;
 		if(Correction.m_Jump && !ManualJump)
 			m_PrismAvoidJumpCooldown = 6;
+		if(Correction.m_Hook)
+		{
+			m_PrismAvoidHookOwned = true;
+			m_PrismAvoidHookPoint = Correction.m_HookPoint;
+			Input.m_Hook = 1;
+			const vec2 Aim = Correction.m_HookPoint - Local.m_Pos;
+			Input.m_TargetX = round_to_int(Aim.x);
+			Input.m_TargetY = round_to_int(Aim.y);
+		}
+		else
+			m_PrismAvoidHookOwned = false;
 	}
 	else
+	{
 		m_PrismAvoidLastDirection = 0;
+		m_PrismAvoidHookOwned = false;
+	}
 	return;
 }
 
@@ -172,6 +248,18 @@ void CGameClient::PrismRenderAssistDebug()
 				i == m_PrismAssistSelected && i > 0 ? Accent.WithAlpha(0.85f) : Accent.WithAlpha(i ? 0.22f : 0.48f));
 			const IGraphics::CLineItem Line(Path.m_aStates[j - 1].m_Pos, Path.m_aStates[j].m_Pos);
 			Graphics()->LinesDraw(&Line, 1);
+		}
+		if(g_Config.m_PrismFreezeDebug && Path.m_Hook && Path.m_Count)
+		{
+			Graphics()->SetColor(i == m_PrismAssistSelected && m_PrismAvoidHookOwned ? Accent.WithAlpha(1) : ColorRGBA(0.48f, 0.82f, 1, 0.55f));
+			const vec2 Point = Path.m_HookPoint;
+			const IGraphics::CLineItem aPoint[] = {{Point + vec2(-4, -4), Point + vec2(4, 4)}, {Point + vec2(-4, 4), Point + vec2(4, -4)}};
+			Graphics()->LinesDraw(aPoint, 2);
+			if(i == m_PrismAssistSelected && m_PrismAvoidHookOwned)
+			{
+				const IGraphics::CLineItem Hook(Path.m_aStates[0].m_Pos, Point);
+				Graphics()->LinesDraw(&Hook, 1);
+			}
 		}
 		if(g_Config.m_PrismFreezeDebug && Path.m_Count && i == 0)
 		{
@@ -227,11 +315,14 @@ void CGameClient::PrismRenderAssistDebug()
 	if(g_Config.m_PrismFreezeDebug && m_PrismAssistPathCount)
 	{
 		const auto &Base = m_aPrismAssistPaths[0];
-		char aStatus[80];
-		str_format(aStatus, sizeof(aStatus), "Freeze: %s%s  %d ticks  candidates: %d",
+		char aStatus[160];
+		str_format(aStatus, sizeof(aStatus), "Freeze: %s%s  %d ticks  candidates: %d (hook %d)  own D%d J%d H%d A%d",
 			PrismAssist::DebugStatus(Base),
 			Base.Safe() && Base.m_MinSafetyMargin < 16.0f ? " (CLOSE)" : "",
-			Base.m_Count - 1, m_PrismAssistPathCount);
+			Base.m_Count - 1, m_PrismAssistPathCount, m_PrismAvoidHookCandidateCount,
+			m_PrismAssistSelected > 0 && m_aPrismAssistPaths[m_PrismAssistSelected].m_Direction != Base.m_Direction,
+			m_PrismAssistSelected > 0 && m_aPrismAssistPaths[m_PrismAssistSelected].m_Jump != Base.m_Jump,
+			m_PrismAvoidHookOwned, m_PrismAvoidHookOwned);
 		TextRender()->Text(Base.m_aStates[0].m_Pos.x - 55, Base.m_aStates[0].m_Pos.y - 62, 9.0f, aStatus);
 	}
 }

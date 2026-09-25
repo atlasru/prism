@@ -13,7 +13,8 @@ TEST(PrismAssist, BoundedPredictionAndHazardClassification)
 {
  EXPECT_EQ(PrismAssist::ClampHorizon(10000), PrismAssist::MAX_TICKS);
  EXPECT_EQ(PrismAssist::ClampHorizon(-10), 1);
- EXPECT_LE(PrismAssist::MAX_CANDIDATES, 7);
+ EXPECT_LE(PrismAssist::MAX_CANDIDATES, 14);
+ EXPECT_LE(PrismAssist::MAX_HOOK_CANDIDATES, 6);
  EXPECT_LE(PrismAssist::MAX_PHASES, 3);
  EXPECT_TRUE(PrismAssist::HazardTile(TILE_FREEZE));
  EXPECT_TRUE(PrismAssist::HazardTile(TILE_DEATH));
@@ -113,6 +114,63 @@ TEST(PrismAssist, FreezeImpactTriggersEmergencyButCorridorExitClearsIt)
  aPaths[0].m_MinSafetyMargin = 16;
  aPaths[0].m_aStates[7].m_NearHazard = false;
  EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, HookRecoveryPreservesForwardTravelOverStoppingOrReversing)
+{
+ PrismAssist::STrajectory aPaths[4];
+ for(auto &Path : aPaths) Path.m_Count = 13;
+ aPaths[0].m_Direction = 1;
+ aPaths[0].m_FirstHazard = 7;
+ aPaths[1].m_Direction = 0;
+ aPaths[2].m_Direction = -1;
+ aPaths[3].m_Direction = 1;
+ aPaths[3].m_Hook = aPaths[3].m_HookAttached = true;
+ aPaths[3].m_HookPoint = vec2(160, -96);
+ const auto Recovery = PrismAssist::SelectCorrection(aPaths, 4, 1, false);
+ ASSERT_TRUE(Recovery.m_Apply);
+ EXPECT_TRUE(Recovery.m_Hook);
+ EXPECT_EQ(Recovery.m_Direction, 1);
+ EXPECT_EQ(Recovery.m_HookPoint, vec2(160, -96));
+ aPaths[0].m_FirstHazard = -1;
+ aPaths[0].m_MinSafetyMargin = 8;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 4, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, HookMustAttachAndHaveSafePredictedOutcome)
+{
+ EXPECT_TRUE(PrismAssist::HookableImpact(TILE_SOLID, 0));
+ EXPECT_FALSE(PrismAssist::HookableImpact(TILE_NOHOOK, 0));
+ EXPECT_FALSE(PrismAssist::HookableImpact(TILE_TELEINHOOK, 1));
+ EXPECT_FALSE(PrismAssist::HookableImpact(TILE_SOLID, 1));
+ PrismAssist::STrajectory aPaths[2];
+ aPaths[0].m_Count = aPaths[1].m_Count = 10;
+ aPaths[0].m_FirstHazard = 5;
+ aPaths[1].m_Hook = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Apply);
+ aPaths[1].m_HookAttached = true;
+ aPaths[1].m_FirstHazard = 8;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Apply);
+ aPaths[1].m_FirstHazard = -1;
+ aPaths[1].m_Unknown = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Apply);
+ aPaths[1].m_Unknown = false;
+ EXPECT_TRUE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Hook);
+ aPaths[0].m_Unknown = true;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 2, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, JumpRecoveryTakesPriorityOverSyntheticHook)
+{
+ PrismAssist::STrajectory aPaths[3];
+ for(auto &Path : aPaths) Path.m_Count = 10;
+ aPaths[0].m_FirstHazard = 5;
+ aPaths[0].m_Direction = aPaths[1].m_Direction = aPaths[2].m_Direction = 1;
+ aPaths[1].m_Jump = true;
+ aPaths[2].m_Hook = aPaths[2].m_HookAttached = true;
+ const auto Correction = PrismAssist::SelectCorrection(aPaths, 3, 1, false);
+ EXPECT_TRUE(Correction.m_Jump);
+ EXPECT_FALSE(Correction.m_Hook);
 }
 
 TEST(PrismAssist, TargetAcquisitionRejectsRangeAngleAndBlockedLine)
