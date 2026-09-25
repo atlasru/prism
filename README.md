@@ -1,34 +1,90 @@
 # Prism
 
-Prism is an open-source Windows 10/11 x64 client based on **DDRaceNetwork (DDNet) 20.0**. Version 0.1.0 is under review; this is not a production release.
+**Prism** is an open-source Windows client based on [DDRaceNetwork (DDNet)](https://github.com/ddnet/ddnet), focused on visual customization, quality-of-life tools and optional gameplay assistance while keeping the DDNet experience familiar.
 
-## Features
+Prism is developed as a client-side extension of DDNet. The project keeps the upstream game, networking, maps, demos and editor while adding its own interface and feature set.
 
-- Dedicated **Insert** overlay available in-game, separate from legacy DDNet Settings. Six functional areas: General, Presets, Tee, Hook, Interface, Performance. Press Insert or Escape to close. Tab moves between sections.
-- Lightweight frosted-glass approximation with translucent layered panels, rounded geometry, short transitions, and subtle hover/toggle feedback. Interface controls adjust menu scale (80–120%), glass opacity (50–100%), and reduced motion. True framebuffer blur is not implemented.
-- Separate local/other-player Tee outlines (color, width) and feathered glow (color, intensity). Supports 0.6 and 0.7 body/feet skin silhouettes.
-- Separate local/other-player Hook tint and feathered glow, using original interpolated endpoints. Hook physics, collisions, and reach are unmodified.
-- Default, Clean, Competitive, Cinematic and Custom presets. Editing a built-in preset selects Custom; Default restores stock-like visuals.
-- Immediate global visual toggle and reset. Optional FPS / average frame-time overlay using existing DDNet timing.
-- Existing DDNet navigation, gameplay, protocol, demos and editor retained. No automated gameplay or new network data.
+## Highlights
 
-## Windows installation
+### Prism interface
 
-Download the ZIP from a successful **Prism Windows** GitHub Actions run. Extract the **entire archive**, then start `Prism.exe` inside the extracted folder. Keep `data`, DLLs and license notices beside it. Windows 10/11 x64 and an OpenGL-capable graphics driver are required. CI packages use OpenGL, not Vulkan. Executables are unsigned.
+Press **Insert** in-game to open Prism's dedicated ClickGUI.
 
-Prism starts with original DDNet visuals. Join a server and press **Insert** to open Prism; choose Clean or enable effects. `prism_toggle` in F1 toggles effects; `bind f8 prism_toggle` assigns a shortcut without replacing any binding automatically. `prism_apply_preset 0` restores Default; IDs 1–4 select Clean, Competitive, Cinematic and Custom. `prism_reset` resets Prism only.
+The interface uses a compact dark-glass design with configurable accent colors, opacity and animation timing. Prism has its own theme and layout system instead of placing all custom options inside the standard DDNet settings pages.
 
-Settings use DDNet's configuration system and are saved as `settings_prism.cfg` in DDNet's normal user directory (normally `%APPDATA%/DDNet` on Windows). `settings_ddnet.cfg` is not overwritten. Assets and demos can remain shared. Existing `autoexec` files still run as in DDNet.
+The UI includes draggable and persistent layouts, snapping, layout locking/reset, a color picker with alpha support, and an optional Windows system cursor in menus.
 
-## Build
+### Visuals
 
-Requires Git, CMake, Python 3, Rust (at least 1.85) and Visual Studio 2022 with Desktop development with C++ and Windows SDK.
+Prism provides configurable client-side visual effects, including:
+
+- Tee outlines and glow;
+- Hook customization and effects;
+- player trails;
+- configurable visible-player boxes;
+- effect previews;
+- separate local and other-player styling;
+- presets and theme customization.
+
+Visual effects do not modify DDNet physics or server state.
+
+### HUD
+
+Prism includes a modular HUD system with configurable widgets such as active hotkeys, client/version information, performance information and input visualization.
+
+HUD elements can be positioned and configured independently.
+
+### Macros
+
+Prism includes a configurable macro system for multi-action input sequences and DDNet-oriented actions.
+
+Manual input retains priority where appropriate, and Prism keeps explicit ownership of synthetic inputs so modules do not leave movement, fire or hook state stuck after they stop.
+
+### Assist
+
+Prism includes optional Assist modules built on bounded client-side prediction.
+
+**Hook Assist** activates only while the player manually uses Hook. It can assist the outgoing hook direction toward an eligible visible tee while preserving the player's physical cursor and never initiating Hook by itself.
+
+**Freeze Avoid** predicts the player's short-term trajectory and can intervene when a trajectory is expected to enter freeze/death. It is designed to preserve the player's intended route rather than simply maximizing distance from freeze. Recovery can use bounded movement, jump and hook/aim corrections when required.
+
+Assist can be disabled completely and includes debug visualization for testing prediction and selected recovery paths.
+
+## Performance
+
+Prism's real-time systems are designed around bounded prediction and fixed candidate sets rather than unbounded searches. Expensive diagnostic rendering is optional.
+
+The client retains DDNet's normal rendering/gameplay architecture and is intended to remain usable at high frame rates.
+
+## Windows
+
+Windows x64 is the primary supported platform.
+
+Download a packaged build from a successful **Prism Windows** GitHub Actions run, extract the complete archive and launch `Prism.exe`.
+
+Keep the bundled `data` directory, DLLs and license files beside the executable.
+
+Prism builds are currently unsigned, so Windows may display the usual warning for an unsigned executable.
+
+## Configuration
+
+Prism settings use DDNet's configuration infrastructure but are stored separately in:
+
+`settings_prism.cfg`
+
+On Windows this is normally located in DDNet's user directory under `%APPDATA%/DDNet`.
+
+Prism does not replace `settings_ddnet.cfg`.
+
+## Building
+
+Requirements include Git, CMake, Python 3, Rust and Visual Studio 2022 with the C++ desktop workload and Windows SDK.
 
 ```powershell
 git clone --recurse-submodules https://github.com/atlasru/prism.git
 cd prism
-git switch feature/prism-overlay-ui
 git submodule update --init --recursive
+
 cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=. -DDOWNLOAD_GTEST=ON -DVULKAN=OFF -DAUTOUPDATE=OFF -DSTEAM=OFF -DDISCORD=OFF -DTOOLS=OFF
 cmake --build build --config Release --target game-client testrunner --parallel 4
 cmake --build build --config Release --target run_tests
@@ -36,8 +92,20 @@ cmake --build build --config Release --target package_default
 python scripts/package_prism.py build
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [FOUNDATION.md](FOUNDATION.md) and [VALIDATION.md](VALIDATION.md). Upstream documentation remains in `docs/`.
+The repository's Windows CI builds and validates both Debug and Release configurations and performs packaged-client smoke testing.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [FOUNDATION.md](FOUNDATION.md) and [VALIDATION.md](VALIDATION.md) for additional project information. Upstream DDNet documentation remains available in `docs/`.
+
+## Project status
+
+Prism is under active development. Features and configuration may change between builds.
+
+The `main` branch contains the current integrated Prism codebase. Development work may still happen in feature branches before being merged into `main`.
 
 ## Attribution and license
 
-Prism is a modified DDNet distribution, not an official DDNet release. DDNet and Teeworlds retain their copyrights. Prism additions use the upstream zlib license. See `license.txt`; assets, fonts, skins and bundled libraries have separate licenses. The package retains upstream notices and adds a `licenses/` collection. Original DDNet icons remain in this initial version.
+Prism is an independent modified DDNet distribution and is **not an official DDNet release**.
+
+DDNet and Teeworlds retain their respective copyrights. Prism code follows the applicable upstream licensing; bundled assets, fonts, skins and third-party libraries may have their own licenses.
+
+See `license.txt` and the bundled license notices for details.
