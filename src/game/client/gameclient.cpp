@@ -583,6 +583,8 @@ void CGameClient::PrismEmergencyStop()
 	m_PrismAssistPathCount = 0;
 	m_PrismAvoidJumpCooldown = 0;
 	m_PrismAvoidLastDirection = 0;
+	m_PrismAvoidIntentDirection = 0;
+	m_PrismAvoidIntentTicks = 0;
 	m_PrismAvoidHookOwned = false;
 	m_PrismAvoidHookPoint = vec2(0, 0);
 	// The next input snapshot releases any previously owned fire counter.
@@ -597,6 +599,8 @@ void CGameClient::OnDummySwap()
 	m_PrismAssistPathCount = 0;
 	m_PrismAvoidJumpCooldown = 0;
 	m_PrismAvoidLastDirection = 0;
+	m_PrismAvoidIntentDirection = 0;
+	m_PrismAvoidIntentTicks = 0;
 	m_PrismAvoidHookOwned = false;
 	m_PrismAvoidHookPoint = vec2(0, 0);
 	m_PrismHammerCounter = 0;
@@ -763,6 +767,8 @@ void CGameClient::OnReset()
 	m_PrismAvoidHookOwned = false;
 	m_PrismAvoidHookPoint = vec2(0, 0);
 	m_PrismAvoidLastDirection = 0;
+	m_PrismAvoidIntentDirection = 0;
+	m_PrismAvoidIntentTicks = 0;
 	m_PrismAvoidJumpCooldown = 0;
 	InvalidateSnapshot();
 

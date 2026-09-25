@@ -13,7 +13,7 @@ TEST(PrismAssist, BoundedPredictionAndHazardClassification)
 {
  EXPECT_EQ(PrismAssist::ClampHorizon(10000), PrismAssist::MAX_TICKS);
  EXPECT_EQ(PrismAssist::ClampHorizon(-10), 1);
- EXPECT_LE(PrismAssist::MAX_CANDIDATES, 14);
+ EXPECT_LE(PrismAssist::MAX_CANDIDATES, 18);
  EXPECT_LE(PrismAssist::MAX_HOOK_CANDIDATES, 6);
  EXPECT_LE(PrismAssist::MAX_PHASES, 3);
  EXPECT_TRUE(PrismAssist::HazardTile(TILE_FREEZE));
@@ -135,6 +135,85 @@ TEST(PrismAssist, HookRecoveryPreservesForwardTravelOverStoppingOrReversing)
  aPaths[0].m_FirstHazard = -1;
  aPaths[0].m_MinSafetyMargin = 8;
  EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 4, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, RouteProgressBeatsLargeClearanceAndReverse)
+{
+ PrismAssist::STrajectory aPaths[3];
+ for(auto &Path : aPaths)
+ {
+  Path.m_Count = 13;
+  Path.m_aStates[0].m_Pos = vec2(100, 100);
+ }
+ aPaths[0].m_Direction = 1;
+ aPaths[0].m_FirstHazard = 5;
+ aPaths[0].m_aStates[5].m_Pos = vec2(130, 100);
+ aPaths[1].m_Direction = -1;
+ aPaths[1].m_aStates[12].m_Pos = vec2(20, 100);
+ aPaths[1].m_MinSafetyMargin = 80;
+ aPaths[2].m_Direction = 1;
+ aPaths[2].m_Jump = true;
+ aPaths[2].m_aStates[12].m_Pos = vec2(180, 100);
+ aPaths[2].m_MinSafetyMargin = 8;
+ ASSERT_TRUE(PrismAssist::PreservesRoute(aPaths[0], aPaths[2], 1));
+ EXPECT_FALSE(PrismAssist::PreservesRoute(aPaths[0], aPaths[1], 1));
+ EXPECT_EQ(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Selected, 2);
+ aPaths[0].m_FirstHazard = -1;
+ aPaths[0].m_MinSafetyMargin = 8;
+ EXPECT_FALSE(PrismAssist::SelectCorrection(aPaths, 3, 1, false).m_Apply);
+}
+
+TEST(PrismAssist, ForwardHookBeatsClearReverseWhenJumpCannotCross)
+{
+ PrismAssist::STrajectory aPaths[4];
+ for(auto &Path : aPaths)
+ {
+  Path.m_Count = 13;
+  Path.m_aStates[0].m_Pos = vec2(100, 0);
+ }
+ aPaths[0].m_Direction = 1;
+ aPaths[0].m_FirstHazard = 5;
+ aPaths[0].m_aStates[5].m_Pos = vec2(130, 0);
+ aPaths[1].m_Direction = 1;
+ aPaths[1].m_Jump = true;
+ aPaths[1].m_aStates[12].m_Pos = vec2(125, 0);
+ aPaths[2].m_Direction = -1;
+ aPaths[2].m_MinSafetyMargin = 80;
+ aPaths[2].m_aStates[12].m_Pos = vec2(20, 0);
+ aPaths[3].m_Direction = 1;
+ aPaths[3].m_Hook = aPaths[3].m_HookAttached = true;
+ aPaths[3].m_MinSafetyMargin = 8;
+ aPaths[3].m_aStates[12].m_Pos = vec2(170, 0);
+ EXPECT_FALSE(PrismAssist::PreservesRoute(aPaths[0], aPaths[1], 1));
+ EXPECT_EQ(PrismAssist::SelectCorrection(aPaths, 4, 1, false).m_Selected, 3);
+}
+
+TEST(PrismAssist, IntentFollowsHeldDirectionThenVelocityThenRecentInput)
+{
+ EXPECT_EQ(PrismAssist::IntendedDirection(1, -4, -1), 1);
+ EXPECT_EQ(PrismAssist::IntendedDirection(0, -4, 1), -1);
+ EXPECT_EQ(PrismAssist::IntendedDirection(0, 0, 1), 1);
+ EXPECT_EQ(PrismAssist::IntendedDirection(0, 0, 0), 0);
+ EXPECT_EQ(PrismAssist::IntendedDirection(0, 0, 0, true, vec2(-100, 10)), -1);
+ EXPECT_EQ(PrismAssist::IntendedDirection(0, 0, 0, false, vec2(-100, 10)), 0);
+}
+
+TEST(PrismAssist, DelaysInterventionOnlyWhileCorrectionRemainsSafe)
+{
+ PrismAssist::STrajectory Base, Selected, Delayed;
+ Base.m_Count = Selected.m_Count = Delayed.m_Count = 13;
+ Base.m_FirstHazard = 7;
+ EXPECT_TRUE(PrismAssist::CanDeferCorrection(Base, Selected, Delayed));
+ Delayed.m_FirstHazard = 6;
+ EXPECT_FALSE(PrismAssist::CanDeferCorrection(Base, Selected, Delayed));
+ Delayed.m_FirstHazard = -1;
+ Base.m_FirstHazard = 1;
+ EXPECT_FALSE(PrismAssist::CanDeferCorrection(Base, Selected, Delayed));
+ Base.m_FirstHazard = 7;
+ Selected.m_Hook = true;
+ EXPECT_FALSE(PrismAssist::CanDeferCorrection(Base, Selected, Delayed));
+ Delayed.m_HookAttached = true;
+ EXPECT_TRUE(PrismAssist::CanDeferCorrection(Base, Selected, Delayed));
 }
 
 TEST(PrismAssist, HookMustAttachAndHaveSafePredictedOutcome)

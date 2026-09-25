@@ -15,7 +15,7 @@
 namespace PrismAssist
 {
 constexpr int MAX_TICKS = 24;
-constexpr int MAX_CANDIDATES = 14;
+constexpr int MAX_CANDIDATES = 18;
 constexpr int MAX_HOOK_CANDIDATES = 6;
 constexpr int MAX_PHASES = 3;
 inline int ClampHorizon(int Horizon) { return std::clamp(Horizon, 1, MAX_TICKS); }
@@ -85,6 +85,10 @@ struct STrajectory
 	bool m_Hook = false;
 	bool m_HookAttached = false;
 	vec2 m_HookPoint = vec2(0, 0);
+	// Input to send now. Later phases describe a bounded sequence, not a
+	// permanent replacement for the player's direction.
+	int m_Phases = 1;
+	std::array<SAction, MAX_PHASES> m_aActions{};
 	bool Safe() const { return m_Count > 0 && m_FirstHazard == -1 && !m_Unknown; }
 };
 
@@ -106,7 +110,40 @@ inline float ScoreTrajectory(const STrajectory &Path, vec2 DesiredPos = vec2(0, 
 	if(!Path.m_Count)
 		return -10000.0f;
 	const SState &Final = Path.m_aStates[Path.m_Count - 1];
-	return 100.0f + Path.m_MinSafetyMargin - length(Final.m_Vel) * 0.1f - distance(Final.m_Pos, DesiredPos) * DesiredWeight;
+	return 100.0f - length(Final.m_Vel) * 0.1f - distance(Final.m_Pos, DesiredPos) * DesiredWeight + Path.m_MinSafetyMargin * 0.02f;
+}
+
+inline int IntendedDirection(int ManualDirection, float VelocityX, int RecentDirection, bool ManualHook = false, vec2 ManualAim = vec2(0, 0))
+{
+	if(ManualDirection)
+		return ManualDirection;
+	if(std::abs(VelocityX) > 1.0f)
+		return VelocityX > 0 ? 1 : -1;
+	if(ManualHook && std::abs(ManualAim.x) > length(ManualAim) * 0.35f)
+		return ManualAim.x > 0 ? 1 : -1;
+	return RecentDirection;
+}
+
+inline float RouteProgress(const STrajectory &Path, int Travel)
+{
+	return Path.m_Count > 0 ? (Path.m_aStates[Path.m_Count - 1].m_Pos.x - Path.m_aStates[0].m_Pos.x) * Travel : 0.0f;
+}
+
+// A safe stop before the predicted impact is a save, but it is not a
+// continuation of the requested route. Clearance is never used here.
+inline bool PreservesRoute(const STrajectory &Base, const STrajectory &Path, int Travel)
+{
+	if(!Path.Safe() || !Travel || Base.m_FirstHazard < 0 || Path.m_Direction * Travel < 0)
+		return false;
+	const float Impact = (Base.m_aStates[Base.m_FirstHazard].m_Pos.x - Base.m_aStates[0].m_Pos.x) * Travel;
+	return RouteProgress(Path, Travel) > Impact + 4.0f &&
+		Path.m_aStates[Path.m_Count - 1].m_Vel.x * Travel >= -0.5f;
+}
+
+inline bool CanDeferCorrection(const STrajectory &Base, const STrajectory &Chosen, const STrajectory &Delayed)
+{
+	return Base.m_FirstHazard > 1 && Chosen.Safe() && Delayed.Safe() &&
+		(!Chosen.m_Hook || Delayed.m_HookAttached);
 }
 
 // Uses DDNet's character core, collision and tuning. Full game-world tile
@@ -178,6 +215,8 @@ public:
 		m_World.m_apCharacters[m_LocalId] = &Core;
 		Out.m_Count = 1;
 		Out.m_Hook = pActions[0].m_Hook;
+		Out.m_Phases = NumActions;
+		std::copy_n(pActions, NumActions, Out.m_aActions.begin());
 		Out.m_aStates[0].m_Pos = Core.m_Pos;
 		Out.m_aStates[0].m_Vel = Core.m_Vel;
 		Out.m_aStates[0].m_HookPos = Core.m_HookPos;
@@ -239,28 +278,38 @@ struct SCorrection
 	int m_Selected = 0;
 	bool m_Hook = false;
 	vec2 m_HookPoint = vec2(0, 0);
+	bool m_RoutePreserving = false;
 };
 
-inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int ManualDirection, bool ManualJump, int Mode = 2, bool MacroDirectionOwned = false)
+inline SCorrection SelectCorrection(const STrajectory *pPaths, int Count, int ManualDirection, bool ManualJump, int Mode = 2, bool MacroDirectionOwned = false, int Travel = 0)
 {
 	SCorrection Result;
 	if(Mode != 2 || !pPaths || Count < 2 || pPaths[0].Safe() || pPaths[0].m_Unknown)
 		return Result;
+	if(!Travel)
+		Travel = ManualDirection;
 	int BestCost = std::numeric_limits<int>::max();
+	float BestProgress = -std::numeric_limits<float>::infinity();
 	for(int i = 1; i < std::min(Count, MAX_CANDIDATES); ++i)
 	{
 		const auto &Path = pPaths[i];
 		if(!Path.Safe() || Path.m_Hook && !Path.m_HookAttached || ManualJump && !Path.m_Jump || MacroDirectionOwned && Path.m_Direction != pPaths[0].m_Direction)
 			continue;
-		// A held direction is preserved for safe forward hook recovery. A
-		// successful jump is cheaper; braking/reversal remain fallback actions.
+		const bool Route = PreservesRoute(pPaths[0], Path, Travel);
+		const float Progress = RouteProgress(Path, Travel);
+		// Progress through the danger outranks braking and reversal. Similar
+		// progress favors the smallest change to the physical input.
 		const int Cost = (Path.m_Direction == pPaths[0].m_Direction ? 0 :
 			Path.m_Direction == 0 ? 3 : Path.m_Direction == -ManualDirection ? 5 : 4) +
 			(Path.m_Jump != pPaths[0].m_Jump ? 1 : 0) + (Path.m_Hook ? 2 : 0);
-		if(Cost < BestCost || Cost == BestCost && (Result.m_Selected == 0 || Path.m_Score > pPaths[Result.m_Selected].m_Score))
+		if(Result.m_Selected == 0 || Route && !Result.m_RoutePreserving ||
+			Route == Result.m_RoutePreserving && (Progress > BestProgress + 16.0f ||
+				std::abs(Progress - BestProgress) <= 16.0f && (Cost < BestCost ||
+					Cost == BestCost && Path.m_Score > pPaths[Result.m_Selected].m_Score)))
 		{
 			BestCost = Cost;
-			Result = {true, Path.m_Direction, Path.m_Jump, i, Path.m_Hook, Path.m_HookPoint};
+			BestProgress = Progress;
+			Result = {true, Path.m_Direction, Path.m_Jump, i, Path.m_Hook, Path.m_HookPoint, Route};
 		}
 	}
 	return Result;

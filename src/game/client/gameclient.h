@@ -181,6 +181,12 @@ public:
 	int m_PrismAssistSelected = 0;
 	int m_PrismAvoidJumpCooldown = 0;
 	int m_PrismAvoidLastDirection = 0;
+	int m_PrismAvoidIntentDirection = 0;
+	int m_PrismAvoidIntentTicks = 0;
+	int m_PrismAvoidInferredDirection = 0;
+	int m_PrismAvoidRouteCandidate = -1;
+	int m_PrismAvoidEmergencyCandidate = -1;
+	bool m_PrismAvoidDeferred = false;
 	bool m_PrismAvoidHookOwned = false;
 	vec2 m_PrismAvoidHookPoint = vec2(0, 0);
 	int m_PrismAvoidHookCandidateCount = 0;
