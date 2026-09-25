@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#08090a">
+  <meta name="description" content="Prism — a visual-first DDNet client for Windows. Free and open source.">
+  <title>Prism — DDNet, refracted.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="nav">
+    <a class="brand" href="#top">PRISM</a>
+    <nav>
+      <a href="#visuals">Visuals</a>
+      <a href="#assist">Assist</a>
+      <a href="https://github.com/atlasru/prism">GitHub</a>
+    </nav>
+    <div class="nav-actions"><span>v0.2.0</span><a class="button small" href="https://github.com/atlasru/prism/releases/download/v0.2.0/Prism-v0.2.0-windows-x64.zip">Download ↓</a></div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy reveal">
+        <div class="eyebrow"><i></i> DDNET, REFRACTED.</div>
+        <h1>PLAY DDNET.<br><em>YOUR WAY.</em></h1>
+        <p>A visual-first DDNet client built for control, customization and movement.</p>
+        <div class="actions">
+          <a class="button" href="https://github.com/atlasru/prism/releases/download/v0.2.0/Prism-v0.2.0-windows-x64.zip">Download for Windows <b>↓</b></a>
+          <a class="ghost" href="https://github.com/atlasru/prism">View source ↗</a>
+        </div>
+        <div class="meta">v0.2.0 <span>·</span> Windows x64 <span>·</span> Open source <span>·</span> Free</div>
+      </div>
+
+      <div class="stage reveal" aria-label="Prism interface preview">
+        <div class="ambient"></div>
+        <div class="game">
+          <div class="map-lines"></div>
+          <div class="freeze"></div>
+          <div class="tee tee-a"><span></span></div>
+          <div class="tee tee-b"><span></span></div>
+          <svg class="hook" viewBox="0 0 1000 600"><path d="M720 370 C640 330 560 300 460 280"/><circle cx="460" cy="280" r="7"/></svg>
+          <div class="trail"></div>
+          <div class="clickgui">
+            <aside>
+              <div class="gui-logo">PRISM</div>
+              <button class="active">Visuals</button><button>HUD</button><button>Assist</button><button>Macros</button><button>Interface</button>
+              <small>v0.2.0</small>
+            </aside>
+            <div class="modules">
+              <div class="gui-title"><span>Visuals</span><small>Customize what you see.</small></div>
+              <div class="module"><div><b>Tee Glow</b><small>Soft outline around players</small></div><i class="toggle on"></i></div>
+              <div class="module"><div><b>Hook Effects</b><small>Trail · Sparkles</small></div><i class="toggle on"></i></div>
+              <div class="module"><div><b>Player Trail</b><small>Length</small></div><div class="slider"><i></i></div></div>
+              <div class="module accent"><div><b>Accent</b><small>#FF8A11</small></div><span class="swatch"></span></div>
+            </div>
+          </div>
+          <div class="fps">1440 <small>FPS</small></div>
+        </div>
+      </div>
+      <div class="scroll">SCROLL TO REFRACT <span>↓</span></div>
+    </section>
+
+    <section class="showcase" id="visuals">
+      <div class="section-copy reveal">
+        <div class="eyebrow"><i></i> VISUAL SYSTEM</div>
+        <h2>MAKE IT<br><em>YOURS.</em></h2>
+        <p>Prism changes how DDNet feels without changing what DDNet is. Every effect is client-side, configurable and built to stay out of your way.</p>
+      </div>
+      <div class="visual-stack reveal">
+        <div class="visual-card main-card">
+          <div class="card-label">TEE VISUALS <span>01</span></div>
+          <div class="mini-world">
+            <div class="rings"></div><div class="tee large"><span></span></div>
+            <div class="tags"><b>OUTLINE</b><b>GLOW</b><b>TRAIL</b></div>
+          </div>
+        </div>
+        <div class="visual-card hook-card"><div class="card-label">HOOK <span>02</span></div><svg viewBox="0 0 400 180"><path d="M25 145 C130 150 195 30 365 50"/><circle cx="365" cy="50" r="7"/></svg></div>
+        <div class="visual-card hud-card"><div class="card-label">HUD <span>03</span></div><div class="keys"><kbd>W</kbd><div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div><div class="hotkeys">ACTIVE HOTKEYS<br><b>Freeze Avoid</b><span>ON</span><br><b>Hook Assist</b><span>HOLD</span></div></div>
+      </div>
+    </section>
+
+    <section class="assist" id="assist">
+      <div class="assist-head reveal">
+        <div class="eyebrow"><i></i> ASSIST</div>
+        <h2>CONTROL WITHOUT<br><em>FIGHTING THE GAME.</em></h2>
+      </div>
+      <div class="assist-grid">
+        <article class="assist-card reveal">
+          <div class="num">01 / HOOK ASSIST</div>
+          <h3>You hook.<br>Prism refines.</h3>
+          <p>Manual hook stays manual. Prism can refine the outgoing trajectory toward an eligible visible tee while your physical cursor stays yours.</p>
+          <div class="trajectory">
+            <span class="player"></span><span class="target"></span>
+            <svg viewBox="0 0 600 230"><path class="intent" d="M75 170 Q290 45 525 95"/><path class="corrected" d="M75 170 Q300 78 525 115"/></svg>
+            <label class="intent-label">intent</label><label class="corrected-label">assisted</label>
+          </div>
+        </article>
+        <article class="assist-card reveal">
+          <div class="num">02 / FREEZE AVOID</div>
+          <h3>Your route.<br>Not the safest-looking route.</h3>
+          <p>Bounded prediction looks ahead for actual freeze contact. If your intended path is safe, Prism stays silent—even when clearance is tiny.</p>
+          <div class="corridor">
+            <div class="ice top"></div><div class="ice bottom"></div><span class="player"></span>
+            <svg viewBox="0 0 600 230"><path class="danger" d="M75 115 C240 115 315 178 520 178"/><path class="safe" d="M75 115 C250 115 340 118 520 115"/></svg>
+            <b class="route">ROUTE PRESERVED</b>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="cta reveal">
+      <div><div class="eyebrow"><i></i> PRISM v0.2.0</div><h2>NO ACCOUNT.<br>NO SUBSCRIPTION.<br><em>JUST PRISM.</em></h2></div>
+      <div class="cta-side"><p>Free. Open source.<br>Built on DDNet.</p><a class="button huge" href="https://github.com/atlasru/prism/releases/download/v0.2.0/Prism-v0.2.0-windows-x64.zip">Download Prism ↓</a><small>Windows 10/11 · x64 · 53.6 MB</small></div>
+    </section>
+  </main>
+
+  <footer><b>PRISM</b><span>DDNet, refracted.</span><a href="https://github.com/atlasru/prism">GitHub ↗</a></footer>
+  <script src="./app.js"></script>
+</body>
+</html>
