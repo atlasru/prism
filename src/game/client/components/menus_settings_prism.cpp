@@ -328,14 +328,12 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     {
     case 7: // Bounded local prediction and input assistance
         Label("Assist   /   local prediction");
-        Toggle("Trigger Bot", &g_Config.m_PrismTriggerEnabled);
-        if(Button(g_Config.m_PrismTriggerAction == 0 ? "Action: Fire" : "Action: Hook", 29))
-            g_Config.m_PrismTriggerAction = 1 - g_Config.m_PrismTriggerAction;
-        Slider("Aim tolerance (degrees)", &g_Config.m_PrismTriggerTolerance, 0, 15);
-        Slider("Target range", &g_Config.m_PrismTriggerRange, 64, 1200);
-        Slider("Lead target (ticks)", &g_Config.m_PrismTriggerPrediction, 0, 12);
-        Slider("Trigger cooldown (ticks)", &g_Config.m_PrismTriggerCooldown, 1, 50);
-        Toggle("Trigger debug", &g_Config.m_PrismTriggerDebug);
+        Toggle("Hook Assist (hold Hook)", &g_Config.m_PrismHookAssist);
+        Slider("Hook target FOV (degrees)", &g_Config.m_PrismHookFov, 5, 180);
+        Slider("Hook target range", &g_Config.m_PrismHookRange, 64, 1200);
+        Slider("Hook correction (%)", &g_Config.m_PrismHookStrength, 1, 100);
+        Slider("Lead target (ticks)", &g_Config.m_PrismHookPrediction, 0, 12);
+        Toggle("Hook Assist debug", &g_Config.m_PrismHookDebug);
         Label("Freeze Avoid   /   only when needed");
         if(Button(g_Config.m_PrismFreezeAvoid == 0 ? "Freeze Avoid: Off" :
                 g_Config.m_PrismFreezeAvoid == 1 ? "Freeze Avoid: Warning" : "Freeze Avoid: Assist", 30))

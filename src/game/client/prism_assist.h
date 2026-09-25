@@ -46,44 +46,6 @@ inline vec2 PredictedTarget(vec2 Position, vec2 Velocity, int LeadTicks)
 {
 	return Position + Velocity * std::clamp(LeadTicks, 0, MAX_TICKS);
 }
-inline bool TriggerAligned(vec2 Aim, vec2 Target, float Range, float ToleranceRadians, bool Visible)
-{
-	const float AimLength = length(Aim);
-	const float Distance = length(Target);
-	if(!Visible || AimLength < 0.001f || Distance < 1.0f || Distance > Range)
-		return false;
-	const vec2 Unit = Aim / AimLength;
-	const float Forward = dot(Unit, Target);
-	if(Forward <= 0.0f)
-		return false;
-	// Tee hit radius plus user-selected angular slack at target distance.
-	const float Cross = std::abs(Unit.x * Target.y - Unit.y * Target.x);
-	return Cross <= CCharacterCore::PhysicalSize() / 2.0f + Forward * std::tan(std::clamp(ToleranceRadians, 0.0f, pi / 4));
-}
-inline bool TriggerReady(bool Aligned, int Tick, int LastTick, int Cooldown)
-{
-	return Aligned && (Tick < LastTick || Tick - LastTick >= std::max(1, Cooldown));
-}
-struct STriggerOutput
-{
-	bool m_FirePulse = false;
-	bool m_HookOwned = false;
-};
-inline STriggerOutput ComposeTrigger(CNetObj_PlayerInput &Input, bool Enabled, bool Aligned, bool Ready,
-	int Action, bool MacroFirePulse, bool MacroHookOwned, bool PreviousHookOwned)
-{
-	STriggerOutput Out;
-	if(!Enabled || !Aligned)
-		return Out;
-	if(Action == 0)
-		Out.m_FirePulse = Ready && !(Input.m_Fire & 1) && !MacroFirePulse;
-	else if(Action == 1 && !Input.m_Hook && !MacroHookOwned && (PreviousHookOwned || Ready))
-	{
-		Input.m_Hook = 1;
-		Out.m_HookOwned = true;
-	}
-	return Out;
-}
 
 struct SState
 {
@@ -312,6 +274,11 @@ inline vec2 InterpolateAim(vec2 Current, vec2 Desired, float Strength, float Max
 	const float Step = std::clamp(Delta * std::clamp(Strength, 0.0f, 1.0f), -MaxAngleRadians, MaxAngleRadians);
 	const float Magnitude = length(Current) + (length(Desired) - length(Current)) * std::clamp(Strength, 0.0f, 1.0f);
 	return vec2(std::cos(A + Step), std::sin(A + Step)) * Magnitude;
+}
+inline vec2 HookAssistAim(vec2 Manual, vec2 Desired, bool PhysicalHook, bool Enabled, bool ValidTarget,
+	float Strength, float MaxAngleRadians)
+{
+	return PhysicalHook && Enabled && ValidTarget ? InterpolateAim(Manual, Desired, Strength, MaxAngleRadians) : Manual;
 }
 }
 #endif

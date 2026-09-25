@@ -153,66 +153,48 @@ TEST(PrismAssist, TargetRetentionAndAimBounds)
  EXPECT_EQ(PrismAssist::InterpolateAim(vec2(10, 0), vec2(0, 10), 0.0f, pi / 4), vec2(10, 0));
 }
 
-TEST(PrismTrigger, AlignmentPredictionRangeAndCooldown)
+TEST(PrismHookAssist, PhysicalHookOwnershipAndImmediateRelease)
 {
- const vec2 Aim(100, 0);
- EXPECT_TRUE(PrismAssist::TriggerAligned(Aim, vec2(200, 0), 500, 0, true));
- EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(200, 40), 500, 0, true));
- EXPECT_TRUE(PrismAssist::TriggerAligned(Aim, vec2(200, 40), 500, 8 * pi / 180, true));
- EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(600, 0), 500, pi / 6, true));
- EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(-200, 0), 500, pi / 6, true));
- EXPECT_FALSE(PrismAssist::TriggerAligned(Aim, vec2(200, 0), 500, pi / 6, false));
- EXPECT_EQ(PrismAssist::PredictedTarget(vec2(200, 0), vec2(0, 2), 5), vec2(200, 10));
- EXPECT_FALSE(PrismAssist::TriggerReady(true, 103, 100, 6));
- EXPECT_TRUE(PrismAssist::TriggerReady(true, 106, 100, 6));
- EXPECT_FALSE(PrismAssist::TriggerReady(false, 106, 100, 6));
- EXPECT_TRUE(PrismAssist::TriggerReady(true, 3, 2000, 6)); // tick reset
+ const vec2 Manual(200, 0);
+ const vec2 Desired(150, 100);
+ EXPECT_EQ(PrismAssist::HookAssistAim(Manual, Desired, false, true, true, 1.0f, pi / 4), Manual);
+ EXPECT_EQ(PrismAssist::HookAssistAim(Manual, Desired, true, false, true, 1.0f, pi / 4), Manual);
+ EXPECT_EQ(PrismAssist::HookAssistAim(Manual, Desired, true, true, false, 1.0f, pi / 4), Manual);
+ const vec2 Assisted = PrismAssist::HookAssistAim(Manual, Desired, true, true, true, 0.5f, pi / 6);
+ EXPECT_GT(Assisted.y, 0);
+ EXPECT_EQ(PrismAssist::HookAssistAim(Manual, Desired, false, true, true, 0.5f, pi / 6), Manual);
+ // The composed macro or Freeze hook is not the physical activation signal.
+ EXPECT_EQ(PrismAssist::HookAssistAim(Manual, Desired, false, true, true, 1.0f, pi / 6), Manual);
 }
 
-TEST(PrismTrigger, FireUsesComposerAndNeverSteersManualAim)
+TEST(PrismHookAssist, FovRangeLosAndTargetRetention)
 {
- CNetObj_PlayerInput Input{};
- Input.m_TargetX = 200;
- Input.m_TargetY = 15;
- PrismInput::CFireComposer Composer;
- Composer.Reset(0, INPUT_STATE_MASK);
- const auto First = PrismAssist::ComposeTrigger(Input, true, true, true, 0, false, false, false);
- EXPECT_TRUE(First.m_FirePulse);
- const int Press = Composer.Compose(Input.m_Fire, First.m_FirePulse, INPUT_STATE_MASK);
- EXPECT_EQ(Press & 1, 1);
- EXPECT_EQ(Input.m_TargetX, 200);
- EXPECT_EQ(Input.m_TargetY, 15);
- EXPECT_EQ(Input.m_Hook, 0);
- const auto Cooldown = PrismAssist::ComposeTrigger(Input, true, true, false, 0, false, false, false);
- EXPECT_FALSE(Cooldown.m_FirePulse);
- EXPECT_EQ(Composer.Compose(Input.m_Fire, Cooldown.m_FirePulse, INPUT_STATE_MASK) & 1, 0);
- EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 0, true, false, false).m_FirePulse);
- Input.m_Fire = 1;
- EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 0, false, false, false).m_FirePulse);
- EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, false, true, true, 0, false, false, false).m_FirePulse);
- EXPECT_EQ(Input.m_TargetX, 200);
- EXPECT_EQ(Input.m_TargetY, 15);
+ const vec2 Manual(100, 0);
+ EXPECT_TRUE(PrismAssist::EligibleTarget(Manual, vec2(150, 15), pi / 3, 500, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Manual, vec2(0, 200), pi / 3, 500, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Manual, vec2(600, 0), pi / 3, 500, true));
+ EXPECT_FALSE(PrismAssist::EligibleTarget(Manual, vec2(150, 0), pi / 3, 500, false));
+ EXPECT_EQ(PrismAssist::PredictedTarget(vec2(150, 0), vec2(0, 2), 5), vec2(150, 10));
+ const PrismAssist::STargetCandidate Targets[] = {{7, 100, 0.1f}, {9, 90, 0.2f}};
+ EXPECT_EQ(PrismAssist::SelectTarget(Targets, 2, 7), 0);
 }
 
-TEST(PrismTrigger, HookOwnershipAndManualPriority)
+TEST(PrismHookAssist, AimCompositionDoesNotMutateFireOrPhysicalSource)
 {
- CNetObj_PlayerInput Input{};
- Input.m_TargetX = 170;
- auto Output = PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, false, false);
- EXPECT_TRUE(Output.m_HookOwned);
- EXPECT_EQ(Input.m_Hook, 1);
- Input.m_Hook = 0; // next physical input snapshot
- Output = PrismAssist::ComposeTrigger(Input, true, true, false, 1, false, false, true);
- EXPECT_TRUE(Output.m_HookOwned);
- Input.m_Hook = 0;
- Output = PrismAssist::ComposeTrigger(Input, true, false, false, 1, false, false, true);
- EXPECT_FALSE(Output.m_HookOwned);
- EXPECT_EQ(Input.m_Hook, 0);
- Input.m_Hook = 1;
- EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, false, false).m_HookOwned);
- Input.m_Hook = 0;
- EXPECT_FALSE(PrismAssist::ComposeTrigger(Input, true, true, true, 1, false, true, false).m_HookOwned);
- EXPECT_EQ(Input.m_TargetX, 170);
+ CNetObj_PlayerInput Manual{};
+ Manual.m_TargetX = 200;
+ Manual.m_TargetY = 0;
+ Manual.m_Hook = 1;
+ Manual.m_Fire = 3;
+ CNetObj_PlayerInput Composed = Manual;
+ const vec2 Aim = PrismAssist::HookAssistAim(vec2((float)Manual.m_TargetX, (float)Manual.m_TargetY),
+  vec2(150, 100), Manual.m_Hook != 0, true, true, 0.5f, pi / 6);
+ Composed.m_TargetX = round_to_int(Aim.x);
+ Composed.m_TargetY = round_to_int(Aim.y);
+ EXPECT_EQ(Manual.m_TargetX, 200);
+ EXPECT_EQ(Manual.m_TargetY, 0);
+ EXPECT_EQ(Composed.m_Fire, Manual.m_Fire);
+ EXPECT_EQ(Composed.m_Hook, Manual.m_Hook);
 }
 
 class PrismConfig : public ::testing::Test

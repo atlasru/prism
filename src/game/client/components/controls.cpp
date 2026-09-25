@@ -348,12 +348,11 @@ int CControls::SnapInput(int *pData)
  if(Owned & PrismQol::OWN_JUMP) PrismComposedInput.m_Jump = 1;
  if(Owned & PrismQol::OWN_HOOK) PrismComposedInput.m_Hook = 1;
  const bool Pulse = Allowed && GameClient()->m_PrismMacros.TakeFirePulse();
-	// Trigger returns a pulse; only the fire composer owns the wire counter.
-	// Manual aim, physical fire, and dummy input remain untouched.
-	const bool TriggerFire = GameClient()->PrismComposeAssist(PrismComposedInput, m_aInputData[Dummy].m_Direction,
+	// Physical Hook ownership is passed separately from macro/synthetic Hook.
+	GameClient()->PrismComposeAssist(PrismComposedInput, m_aInputData[Dummy].m_Direction,
 		m_aInputData[Dummy].m_Jump != 0, (Owned & (PrismQol::OWN_LEFT | PrismQol::OWN_RIGHT)) != 0,
-		Pulse, (Owned & PrismQol::OWN_HOOK) != 0);
-	PrismComposedInput.m_Fire = m_aPrismFire[Dummy].Compose(m_aInputData[Dummy].m_Fire, Pulse || TriggerFire, INPUT_STATE_MASK);
+		m_aInputData[Dummy].m_Hook != 0, (Owned & PrismQol::OWN_HOOK) != 0);
+	PrismComposedInput.m_Fire = m_aPrismFire[Dummy].Compose(m_aInputData[Dummy].m_Fire, Pulse, INPUT_STATE_MASK);
 	Send = Send || PrismComposedInput.m_Direction != m_aPrismLastOutput[Dummy].m_Direction;
 	Send = Send || PrismComposedInput.m_Jump != m_aPrismLastOutput[Dummy].m_Jump;
 	Send = Send || PrismComposedInput.m_Hook != m_aPrismLastOutput[Dummy].m_Hook;
