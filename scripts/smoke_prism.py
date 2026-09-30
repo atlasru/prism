@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     values = run(['prism_emergency_stop'])
     assert values.get('prism_hook_assist', '0') == '0', values
     assert values.get('prism_freeze_avoid', '0') == '0', values
-    values = run(['prism_atmosphere_preset 2', 'prism_exposure 137',
+    values = run(['prism_apply_atmosphere_preset 2', 'prism_exposure 137',
                   'prism_player_glow 1', 'prism_glow_radius 151',
                   'prism_glow_color $55AAFF80'])
     atmosphere = {'prism_atmosphere': '1', 'prism_exposure': '137',
@@ -103,15 +103,15 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     for key, value in atmosphere.items():
         assert values.get(key) == value, (key, values)
     assert values['prism_glow_color'] == saved_color
-    values = run(['prism_atmosphere_preset 4'])
+    values = run(['prism_apply_atmosphere_preset 4'])
     assert values.get('prism_exposure') == '137', values
-    values = run(['prism_atmosphere_preset 0'])
+    values = run(['prism_apply_atmosphere_preset 0'])
     assert values.get('prism_atmosphere', '0') == '0', values
     assert values.get('prism_exposure') == '137', values
     values = run(['prism_gamma -10', 'prism_glow_radius 99999'])
     assert values.get('prism_gamma') == '25', values
     assert values.get('prism_glow_radius') == '192', values
-    values = run(['prism_atmosphere_preset 1'])
+    values = run(['prism_apply_atmosphere_preset 1'])
     values = run([])
     assert values.get('prism_atmosphere_preset') == '1', values
     assert values.get('prism_contrast') == '105', values

@@ -23,4 +23,4 @@ MACRO_CONFIG_INT(PrismGlowColorMode, prism_glow_color_mode, 0, 0, 2, CFGFLAG_CLI
 MACRO_CONFIG_COL(PrismAtmosphereTint, prism_atmosphere_tint, 4278190335u, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Atmosphere tint (HSLA)")
 MACRO_CONFIG_COL(PrismGlowColor, prism_glow_color, 4278190335u, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Player aura color (HSLA)")
 // Identity is serialized last, after all values have been restored.
-MACRO_CONFIG_INT(PrismAtmospherePreset, prism_atmosphere_preset, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom; use prism_atmosphere_preset")
+MACRO_CONFIG_INT(PrismAtmospherePreset, prism_atmosphere_preset, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom; use prism_apply_atmosphere_preset")

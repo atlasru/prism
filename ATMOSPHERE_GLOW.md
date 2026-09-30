@@ -55,7 +55,7 @@ Color config defaults: `4278190335` (packed opaque white HSLA). Hex console colo
 
 ## Presets and persistence
 
-`prism_atmosphere_preset <id>` applies a preset. The saved `prism_atmosphere_preset` config variable records identity and does not apply values by itself.
+`prism_apply_atmosphere_preset <id>` applies a preset. The saved `prism_atmosphere_preset` config variable records identity and does not apply values by itself.
 
 | ID / name | Exposure | Contrast | Saturation | Highlights / shadows | Bloom strength / threshold / radius | Vignette |
 |---|---:|---:|---:|---:|---:|---:|

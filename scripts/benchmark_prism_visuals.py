@@ -33,12 +33,12 @@ def main():
     profiles = {
         'baseline': [],
         'glow': ['prism_player_glow 1'],
-        'atmosphere': ['prism_atmosphere_preset 1', 'prism_bloom_strength 0'],
-        'bloom': ['prism_atmosphere_preset 1', 'prism_bloom_strength 100'],
-        'glow_atmosphere': ['prism_player_glow 1', 'prism_atmosphere_preset 1'],
+        'atmosphere': ['prism_apply_atmosphere_preset 1', 'prism_bloom_strength 0'],
+        'bloom': ['prism_apply_atmosphere_preset 1', 'prism_bloom_strength 100'],
+        'glow_atmosphere': ['prism_player_glow 1', 'prism_apply_atmosphere_preset 1'],
         'aggressive': ['prism_player_glow 1', 'prism_glow_radius 192',
                        'prism_glow_intensity 400', 'prism_glow_alpha 100',
-                       'prism_atmosphere_preset 1', 'prism_bloom_strength 500',
+                       'prism_apply_atmosphere_preset 1', 'prism_bloom_strength 500',
                        'prism_bloom_threshold 0', 'prism_bloom_radius 32'],
     }
     report = {'client': str(client), 'demo': str(demo), 'profiles': {}}
