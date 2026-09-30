@@ -135,6 +135,8 @@ bool CCommandProcessorFragment_OpenGL3_3::Cmd_Init(const SCommand_Init *pCommand
 				glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_AtmosphereMaxSize);
 				pCommand->m_pCapabilities->m_Atmosphere = true;
 			}
+			else
+				glDeleteProgram(m_pAtmosphereProgram->GetProgramId());
 		}
 		if(!pCommand->m_pCapabilities->m_Atmosphere)
 		{
@@ -787,9 +789,10 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_Atmosphere(const CCommandBuffer::S
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		GLint AllocatedWidth = 0;
+		GLint AllocatedWidth = 0, AllocatedHeight = 0;
 		glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &AllocatedWidth);
-		m_AtmosphereAllocationFailed = AllocatedWidth != Width;
+		glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &AllocatedHeight);
+		m_AtmosphereAllocationFailed = AllocatedWidth != Width || AllocatedHeight != Height;
 		if(m_AtmosphereAllocationFailed)
 			log_warn("prism/atmosphere", "Screen texture allocation failed; effect bypassed.");
 	}
