@@ -23,6 +23,12 @@ class CGLSLTextProgram;
 class CCommandProcessorFragment_OpenGL3_3 : public CCommandProcessorFragment_OpenGL3
 {
 protected:
+	CGLSLTWProgram *m_pAtmosphereProgram = nullptr;
+	TWGLuint m_AtmosphereTexture = 0, m_AtmosphereVao = 0;
+	int m_AtmosphereWidth = 0, m_AtmosphereHeight = 0, m_AtmosphereMaxSize = 0;
+	bool m_AtmosphereAllocationFailed = false;
+	int m_aAtmosphereUniforms[5] = {};
+	void Cmd_Atmosphere(const CCommandBuffer::SCommand_Atmosphere *pCommand) override;
 	int m_MaxQuadsAtOnce;
 	static const int ms_MaxQuadsPossible = 256;
 

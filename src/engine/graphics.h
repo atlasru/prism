@@ -307,6 +307,9 @@ public:
 	virtual void WindowCreateNtf(uint32_t WindowId) = 0;
 
 	// ForceClearNow forces the backend to trigger a clear, even at performance cost, else it might be delayed by one frame
+	// World-only optional post processing. Parameters are packed as four vec4 uniforms.
+	virtual bool SupportsAtmosphere() const { return false; }
+	virtual void RenderAtmosphere(const float *pParameters) {}
 	virtual void Clear(float r, float g, float b, bool ForceClearNow = false) = 0;
 
 	virtual void ClipEnable(int x, int y, int w, int h) = 0;

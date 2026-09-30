@@ -110,6 +110,7 @@ public:
 
 struct SBackendCapabilities
 {
+	bool m_Atmosphere = false;
 	bool m_TileBuffering;
 	bool m_QuadBuffering;
 	bool m_TextBuffering;
@@ -265,6 +266,7 @@ public:
 	void WindowCreateNtf(uint32_t WindowId) override;
 
 	bool GetDriverVersion(EGraphicsDriverAgeType DriverAgeType, int &Major, int &Minor, int &Patch, const char *&pName, EBackendType BackendType) override;
+	bool SupportsAtmosphere() const override { return m_Capabilities.m_Atmosphere; }
 	bool IsConfigModernAPI() override { return IsModernAPI(m_BackendType); }
 	bool UseTrianglesAsQuad() override { return m_Capabilities.m_TrianglesAsQuads; }
 	bool HasTileBuffering() override { return m_Capabilities.m_TileBuffering; }

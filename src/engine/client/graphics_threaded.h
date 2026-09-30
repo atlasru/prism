@@ -131,6 +131,7 @@ public:
 		CMD_CLEAR,
 		CMD_RENDER,
 		CMD_RENDER_TEX3D,
+		CMD_PRISM_ATMOSPHERE,
 
 		// opengl 2.0+ commands (some are just emulated and only exist in opengl 3.3+)
 		CMD_CREATE_BUFFER_OBJECT, // create vbo
@@ -202,6 +203,12 @@ public:
 		int m_ClipY;
 		int m_ClipW;
 		int m_ClipH;
+	};
+
+	struct SCommand_Atmosphere : public SCommand
+	{
+		SCommand_Atmosphere() : SCommand(CMD_PRISM_ATMOSPHERE) {}
+		float m_aParameters[16];
 	};
 
 	struct SCommand_Clear : public SCommand
@@ -713,6 +720,7 @@ public:
 
 	virtual bool GetDriverVersion(EGraphicsDriverAgeType DriverAgeType, int &Major, int &Minor, int &Patch, const char *&pName, EBackendType BackendType) = 0;
 	// checks if the current values of the config are a graphics modern API
+	virtual bool SupportsAtmosphere() const { return false; }
 	virtual bool IsConfigModernAPI() { return false; }
 	virtual bool UseTrianglesAsQuad() { return false; }
 	virtual bool HasTileBuffering() { return false; }
@@ -953,6 +961,8 @@ public:
 
 	void TextureSet(CTextureHandle TextureId) override;
 
+	bool SupportsAtmosphere() const override { return m_pBackend->SupportsAtmosphere(); }
+	void RenderAtmosphere(const float *pParameters) override;
 	void Clear(float r, float g, float b, bool ForceClearNow = false) override;
 
 	void QuadsBegin() override;

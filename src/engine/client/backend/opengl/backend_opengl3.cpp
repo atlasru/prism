@@ -114,6 +114,36 @@ bool CCommandProcessorFragment_OpenGL3_3::Cmd_Init(const SCommand_Init *pCommand
 
 	CGLSLCompiler ShaderCompiler(g_Config.m_GfxGLMajor, g_Config.m_GfxGLMinor, g_Config.m_GfxGLPatch, m_IsOpenGLES, m_OpenGLTextureLodBIAS / 1000.0f);
 
+	pCommand->m_pCapabilities->m_Atmosphere = false;
+#ifndef BACKEND_AS_OPENGL_ES
+	{
+		CGLSL Vertex, Fragment;
+		m_pAtmosphereProgram = new CGLSLTWProgram;
+		if(Vertex.LoadShader(&ShaderCompiler, pCommand->m_pStorage, "shader/prism_atmosphere.vert", GL_VERTEX_SHADER) &&
+			Fragment.LoadShader(&ShaderCompiler, pCommand->m_pStorage, "shader/prism_atmosphere.frag", GL_FRAGMENT_SHADER))
+		{
+			m_pAtmosphereProgram->CreateProgram();
+			m_pAtmosphereProgram->AddShader(&Vertex);
+			m_pAtmosphereProgram->AddShader(&Fragment);
+			if(m_pAtmosphereProgram->LinkProgram())
+			{
+				const char *apUniforms[] = {"gGrade", "gDepthBloom", "gSpreadVignette", "gTint", "gTextureSampler"};
+				for(int i = 0; i < 5; ++i)
+					m_aAtmosphereUniforms[i] = m_pAtmosphereProgram->GetUniformLoc(apUniforms[i]);
+				glGenTextures(1, &m_AtmosphereTexture);
+				glGenVertexArrays(1, &m_AtmosphereVao);
+				glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_AtmosphereMaxSize);
+				pCommand->m_pCapabilities->m_Atmosphere = true;
+			}
+		}
+		if(!pCommand->m_pCapabilities->m_Atmosphere)
+		{
+			delete m_pAtmosphereProgram;
+			m_pAtmosphereProgram = nullptr;
+			log_warn("prism/atmosphere", "Atmosphere shader unavailable; normal rendering preserved.");
+		}
+	}
+#endif
 	GLint CapVal;
 	glGetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &CapVal);
 
@@ -470,6 +500,15 @@ bool CCommandProcessorFragment_OpenGL3_3::Cmd_Init(const SCommand_Init *pCommand
 void CCommandProcessorFragment_OpenGL3_3::Cmd_Shutdown(const SCommand_Shutdown *pCommand)
 {
 	glUseProgram(0);
+	delete m_pAtmosphereProgram;
+	m_pAtmosphereProgram = nullptr;
+	if(m_AtmosphereTexture)
+		glDeleteTextures(1, &m_AtmosphereTexture);
+	if(m_AtmosphereVao)
+		glDeleteVertexArrays(1, &m_AtmosphereVao);
+	m_AtmosphereTexture = m_AtmosphereVao = 0;
+	m_AtmosphereWidth = m_AtmosphereHeight = 0;
+	m_AtmosphereAllocationFailed = false;
 
 	m_pPrimitiveProgram->DeleteProgram();
 	m_pPrimitiveProgramTextured->DeleteProgram();
@@ -717,6 +756,70 @@ void CCommandProcessorFragment_OpenGL3_3::Cmd_TextTextures_Create(const CCommand
 {
 	TextureCreate(pCommand->m_Slot, pCommand->m_Width, pCommand->m_Height, GL_RED, GL_RED, TextureFlag::NO_MIPMAPS, pCommand->m_pTextData);
 	TextureCreate(pCommand->m_SlotOutline, pCommand->m_Width, pCommand->m_Height, GL_RED, GL_RED, TextureFlag::NO_MIPMAPS, pCommand->m_pTextOutlineData);
+}
+
+void CCommandProcessorFragment_OpenGL3_3::Cmd_Atmosphere(const CCommandBuffer::SCommand_Atmosphere *pCommand)
+{
+#ifndef BACKEND_AS_OPENGL_ES
+	if(!m_pAtmosphereProgram)
+		return;
+	GLint aViewport[4];
+	glGetIntegerv(GL_VIEWPORT, aViewport);
+	const int Width = aViewport[2], Height = aViewport[3];
+	if(Width <= 0 || Height <= 0 || Width > m_AtmosphereMaxSize || Height > m_AtmosphereMaxSize)
+		return;
+	GLint ActiveTexture, Texture, Sampler, Vao, Program;
+	glGetIntegerv(GL_ACTIVE_TEXTURE, &ActiveTexture);
+	glActiveTexture(GL_TEXTURE0);
+	glGetIntegerv(GL_TEXTURE_BINDING_2D, &Texture);
+	glGetIntegerv(GL_SAMPLER_BINDING, &Sampler);
+	glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &Vao);
+	glGetIntegerv(GL_CURRENT_PROGRAM, &Program);
+	const bool Blend = glIsEnabled(GL_BLEND), Scissor = glIsEnabled(GL_SCISSOR_TEST), Depth = glIsEnabled(GL_DEPTH_TEST);
+	glBindTexture(GL_TEXTURE_2D, m_AtmosphereTexture);
+	glBindSampler(0, 0);
+	if(Width != m_AtmosphereWidth || Height != m_AtmosphereHeight)
+	{
+		m_AtmosphereWidth = Width;
+		m_AtmosphereHeight = Height;
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, Width, Height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		GLint AllocatedWidth = 0;
+		glGetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &AllocatedWidth);
+		m_AtmosphereAllocationFailed = AllocatedWidth != Width;
+		if(m_AtmosphereAllocationFailed)
+			log_warn("prism/atmosphere", "Screen texture allocation failed; effect bypassed.");
+	}
+	if(!m_AtmosphereAllocationFailed)
+	{
+		// Copy the completed world. No framebuffer switch, CPU readback, or per-frame allocation.
+		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, aViewport[0], aViewport[1], Width, Height);
+		glDisable(GL_BLEND);
+		glDisable(GL_SCISSOR_TEST);
+		glDisable(GL_DEPTH_TEST);
+		m_pAtmosphereProgram->UseProgram();
+		for(int i = 0; i < 4; ++i)
+			m_pAtmosphereProgram->SetUniformVec4(m_aAtmosphereUniforms[i], 1, pCommand->m_aParameters + 4 * i);
+		m_pAtmosphereProgram->SetUniform(m_aAtmosphereUniforms[4], 0);
+		glBindVertexArray(m_AtmosphereVao);
+		glDrawArrays(GL_TRIANGLES, 0, 3);
+	}
+	// Restore real state, including the bindings represented by DDNet's state caches.
+	glBindVertexArray(Vao);
+	glUseProgram(Program);
+	glBindTexture(GL_TEXTURE_2D, Texture);
+	glBindSampler(0, Sampler);
+	glActiveTexture(ActiveTexture);
+	if(Blend)
+		glEnable(GL_BLEND);
+	if(Scissor)
+		glEnable(GL_SCISSOR_TEST);
+	if(Depth)
+		glEnable(GL_DEPTH_TEST);
+#endif
 }
 
 void CCommandProcessorFragment_OpenGL3_3::Cmd_Clear(const CCommandBuffer::SCommand_Clear *pCommand)

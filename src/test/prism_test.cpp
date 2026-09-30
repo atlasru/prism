@@ -576,3 +576,160 @@ TEST(PrismHud, NormalizedPositionsRemainWithinBounds)
     EXPECT_EQ(PrismQol::HudNormalize(150, 300), 5000);
     EXPECT_EQ(PrismQol::HudNormalize(0, 0), 0);
 }
+
+#include <game/client/prism_atmosphere.h>
+
+class PrismAtmosphereConfig : public ::testing::Test
+{
+protected:
+	CConfig m_Config{};
+	CConsole m_Console{CFGFLAG_CLIENT};
+	std::vector<std::unique_ptr<SConfigVariable>> m_Variables;
+	void SetUp() override
+	{
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) m_Variables.emplace_back(new SIntConfigVariable(&m_Console, #ScriptName, SConfigVariable::VAR_INT, Flags, Desc, &m_Config.m_##Name, Def, Min, Max));
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) m_Variables.emplace_back(new SColorConfigVariable(&m_Console, #ScriptName, SConfigVariable::VAR_COLOR, Flags, Desc, &m_Config.m_##Name, Def));
+#include <engine/shared/prism_atmosphere_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
+		for(auto &Variable : m_Variables)
+			Variable->Register();
+		m_Console.StoreCommands(false);
+	}
+};
+
+TEST_F(PrismAtmosphereConfig, DefaultsAndAllConsoleRangeBounds)
+{
+	EXPECT_EQ(m_Config.m_PrismAtmosphere, 0);
+	EXPECT_EQ(m_Config.m_PrismPlayerGlow, 0);
+	EXPECT_EQ(m_Config.m_PrismGamma, 100);
+	EXPECT_EQ(m_Config.m_PrismBloomStrength, 0);
+	EXPECT_EQ(color_cast<ColorRGBA>(ColorHSLA(m_Config.m_PrismAtmosphereTint, true)), ColorRGBA(1, 1, 1, 1));
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) \
+	EXPECT_EQ(m_Config.m_##Name, Def); \
+	m_Console.ExecuteLine(#ScriptName " 2147483647"); \
+	EXPECT_EQ(m_Config.m_##Name, Max); \
+	m_Console.ExecuteLine(#ScriptName " -2147483648"); \
+	EXPECT_EQ(m_Config.m_##Name, Min);
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc)
+#include <engine/shared/prism_atmosphere_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
+}
+
+TEST_F(PrismAtmosphereConfig, DirectInvalidValuesClampBeforeRendering)
+{
+	m_Config.m_PrismExposure = INT_MIN;
+	m_Config.m_PrismGamma = 0;
+	m_Config.m_PrismBloomRadius = INT_MAX;
+	m_Config.m_PrismGlowSoftness = INT_MIN;
+	m_Config.m_PrismGlowColorMode = INT_MAX;
+	PrismAtmosphere::Validate(m_Config);
+	EXPECT_EQ(m_Config.m_PrismExposure, -400);
+	EXPECT_EQ(m_Config.m_PrismGamma, 25);
+	EXPECT_EQ(m_Config.m_PrismBloomRadius, 32);
+	EXPECT_EQ(m_Config.m_PrismGlowSoftness, 25);
+	EXPECT_EQ(m_Config.m_PrismGlowColorMode, 2);
+}
+
+TEST_F(PrismAtmosphereConfig, NamedPresetsAndCustomPreserveExactValues)
+{
+	for(int Id = PrismAtmosphere::SUBTLE; Id <= PrismAtmosphere::VIVID; ++Id)
+	{
+		PrismAtmosphere::ApplyPreset(m_Config, Id);
+		PrismAtmosphere::Validate(m_Config);
+		EXPECT_EQ(m_Config.m_PrismAtmospherePreset, Id);
+		EXPECT_EQ(m_Config.m_PrismAtmosphere, 1);
+		EXPECT_EQ(m_Config.m_PrismGamma, 100);
+	}
+	EXPECT_EQ(m_Config.m_PrismSaturation, 150);
+	PrismAtmosphere::ApplyPreset(m_Config, PrismAtmosphere::CINEMATIC);
+	EXPECT_EQ(m_Config.m_PrismExposure, -30);
+	EXPECT_EQ(m_Config.m_PrismContrast, 125);
+	EXPECT_EQ(m_Config.m_PrismBloomRadius, 8);
+	m_Config.m_PrismExposure = 137;
+	m_Config.m_PrismBloomStrength = 423;
+	PrismAtmosphere::Validate(m_Config);
+	EXPECT_EQ(m_Config.m_PrismAtmospherePreset, PrismAtmosphere::CUSTOM);
+	PrismAtmosphere::ApplyPreset(m_Config, PrismAtmosphere::CUSTOM);
+	EXPECT_EQ(m_Config.m_PrismExposure, 137);
+	EXPECT_EQ(m_Config.m_PrismBloomStrength, 423);
+	PrismAtmosphere::ApplyPreset(m_Config, PrismAtmosphere::OFF);
+	EXPECT_EQ(m_Config.m_PrismAtmosphere, 0);
+	EXPECT_EQ(m_Config.m_PrismExposure, 137);
+	EXPECT_EQ(m_Config.m_PrismBloomStrength, 423);
+}
+
+TEST_F(PrismAtmosphereConfig, AllSettingsRoundTripIncludingColorAlpha)
+{
+	PrismAtmosphere::ApplyPreset(m_Config, PrismAtmosphere::CINEMATIC);
+	m_Console.ExecuteLine("prism_exposure 137");
+	m_Console.ExecuteLine("prism_glow_radius 192");
+	m_Console.ExecuteLine("prism_glow_color $8055AAFF");
+	m_Console.ExecuteLine("prism_atmosphere_tint $40112233");
+	PrismAtmosphere::Validate(m_Config);
+	const auto Before = PrismAtmosphere::Capture(m_Config);
+	std::vector<std::string> Lines;
+	for(auto &Variable : m_Variables)
+	{
+		char aLine[256];
+		Variable->Serialize(aLine, sizeof(aLine));
+		Lines.emplace_back(aLine);
+		Variable->ResetToDefault();
+	}
+	for(const auto &Line : Lines)
+		m_Console.ExecuteLine(Line.c_str());
+	PrismAtmosphere::Validate(m_Config);
+	const auto After = PrismAtmosphere::Capture(m_Config);
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) EXPECT_EQ(Before.m_##Name, After.m_##Name);
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) EXPECT_EQ(Before.m_##Name, After.m_##Name);
+#include <engine/shared/prism_atmosphere_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
+	EXPECT_NEAR(ColorHSLA(m_Config.m_PrismGlowColor, true).a, 128 / 255.0f, 0.0001f);
+}
+
+TEST_F(PrismAtmosphereConfig, PresetsDoNotTouchGlowOrGameplay)
+{
+	m_Config.m_PrismGlowRadius = 151;
+	m_Config.m_PrismPlayerGlow = 1;
+	m_Config.m_ClPredict = 1;
+	for(int Id = 0; Id <= PrismAtmosphere::CUSTOM; ++Id)
+		PrismAtmosphere::ApplyPreset(m_Config, Id);
+	EXPECT_EQ(m_Config.m_PrismGlowRadius, 151);
+	EXPECT_EQ(m_Config.m_PrismPlayerGlow, 1);
+	EXPECT_EQ(m_Config.m_ClPredict, 1);
+}
+
+TEST(PrismAtmosphere, DisabledWorldAndDistinctDummyPaths)
+{
+	EXPECT_TRUE(PrismAtmosphere::WorldEnabled(true, true, true, true));
+	for(int Bit = 0; Bit < 4; ++Bit)
+		EXPECT_FALSE(PrismAtmosphere::WorldEnabled(Bit != 0, Bit != 1, Bit != 2, Bit != 3));
+	EXPECT_FALSE(PrismAtmosphere::GlowEnabled(false, true, false, true, true, true));
+	EXPECT_TRUE(PrismAtmosphere::GlowEnabled(true, true, false, true, false, false));
+	EXPECT_FALSE(PrismAtmosphere::GlowEnabled(true, false, true, true, true, false));
+	EXPECT_TRUE(PrismAtmosphere::GlowEnabled(true, false, true, false, false, true));
+	EXPECT_FALSE(PrismAtmosphere::GlowEnabled(true, false, false, true, false, true));
+}
+
+TEST(PrismAtmosphere, ColorModesAndMonotonicFiniteFalloff)
+{
+	const ColorRGBA Accent(1, 0, 0, 1), Entity(0, 1, 0, 1), Custom(0, 0, 1, 0.5f);
+	EXPECT_EQ(PrismAtmosphere::GlowColor(0, Accent, Entity, Custom), Accent);
+	EXPECT_EQ(PrismAtmosphere::GlowColor(1, Accent, Entity, Custom), Entity);
+	EXPECT_EQ(PrismAtmosphere::GlowColor(2, Accent, Entity, Custom), Custom);
+	for(float Exponent : {0.25f, 1.0f, 2.0f, 8.0f})
+	{
+		float Previous = 1;
+		for(int Step = 0; Step <= 100; ++Step)
+		{
+			const float Current = PrismAtmosphere::Falloff(Step / 100.0f, Exponent);
+			EXPECT_TRUE(std::isfinite(Current));
+			EXPECT_GE(Current, 0);
+			EXPECT_LE(Current, Previous);
+			Previous = Current;
+		}
+		EXPECT_FLOAT_EQ(Previous, 0);
+	}
+}

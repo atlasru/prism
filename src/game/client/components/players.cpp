@@ -4,8 +4,6 @@
 
 #include "players.h"
 
-#include <game/client/prism_effects_render.h>
-
 #include <base/color.h>
 #include <base/dbg.h>
 #include <base/math.h>
@@ -26,6 +24,8 @@
 #include <game/client/components/skins.h>
 #include <game/client/components/sounds.h>
 #include <game/client/gameclient.h>
+#include <game/client/prism_atmosphere.h>
+#include <game/client/prism_effects_render.h>
 #include <game/collision.h>
 #include <game/gamecore.h>
 #include <game/mapitems.h>
@@ -629,6 +629,50 @@ void CPlayers::RenderPlayer(
 		Alpha = g_Config.m_ClRaceGhostAlpha / 100.0f;
 	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1))
 		RenderPrismPlayer(ClientId, Position, Alpha, Local);
+	const bool Dummy = ClientId >= 0 && ClientId == GameClient()->m_aLocalIds[!g_Config.m_ClDummy];
+	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1) && Alpha > 0 &&
+		PrismAtmosphere::GlowEnabled(g_Config.m_PrismPlayerGlow, Local, Dummy,
+			g_Config.m_PrismGlowLocal, g_Config.m_PrismGlowOthers, g_Config.m_PrismGlowDummy))
+	{
+		ColorRGBA Color = PrismAtmosphere::GlowColor(g_Config.m_PrismGlowColorMode,
+			color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismThemeAccent)), RenderInfo.m_ColorBody,
+			color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismGlowColor, true)));
+		Color.a *= Alpha * g_Config.m_PrismGlowAlpha / 100.0f;
+		const float Intensity = g_Config.m_PrismGlowIntensity / 100.0f;
+		if(Color.a > 0 && Intensity > 0)
+		{
+			constexpr int SECTORS = 32, RINGS = 6;
+			vec2 aEdge[SECTORS + 1];
+			const float Radius = g_Config.m_PrismGlowRadius;
+			for(int i = 0; i < SECTORS; ++i)
+			{
+				const vec2 End = Position + direction(i * 2 * pi / SECTORS) * Radius;
+				vec2 Before;
+				aEdge[i] = Collision()->IntersectLine(Position, End, nullptr, &Before) ? Before : End;
+			}
+			aEdge[SECTORS] = aEdge[0];
+			Graphics()->TextureClear();
+			Graphics()->BlendAdditive();
+			Graphics()->QuadsBegin();
+			for(int Ring = 0; Ring < RINGS; ++Ring)
+			{
+				const float Inner = Ring / static_cast<float>(RINGS), Outer = (Ring + 1) / static_cast<float>(RINGS);
+				const float A = std::min(1.0f, Color.a * Intensity * PrismAtmosphere::Falloff(Inner, g_Config.m_PrismGlowSoftness / 100.0f));
+				const float B = std::min(1.0f, Color.a * Intensity * PrismAtmosphere::Falloff(Outer, g_Config.m_PrismGlowSoftness / 100.0f));
+				const IGraphics::CColorVertex aColors[] = {{0, Color.WithAlpha(A)}, {1, Color.WithAlpha(A)}, {2, Color.WithAlpha(B)}, {3, Color.WithAlpha(B)}};
+				Graphics()->SetColorVertex(aColors, 4);
+				for(int i = 0; i < SECTORS; ++i)
+				{
+					IGraphics::CFreeformItem Quad(mix(Position, aEdge[i], Inner), mix(Position, aEdge[i + 1], Inner),
+						mix(Position, aEdge[i], Outer), mix(Position, aEdge[i + 1], Outer));
+					Graphics()->QuadsDrawFreeform(&Quad, 1);
+				}
+			}
+			Graphics()->QuadsEnd();
+			Graphics()->BlendNormal();
+			Graphics()->SetColor(1, 1, 1, 1);
+		}
+	}
 	// TODO: snd_game_volume_others
 	const float Volume = 1.0f;
 

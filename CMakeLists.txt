@@ -1655,6 +1655,8 @@ set(EXPECTED_DATA
   shader/prim.vert
   shader/primex.frag
   shader/primex.vert
+  shader/prism_atmosphere.frag
+  shader/prism_atmosphere.vert
   shader/quad.frag
   shader/quad.vert
   shader/spritemulti.frag
@@ -2257,6 +2259,7 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   network_stun.cpp
   packer.cpp
   packer.h
+  prism_atmosphere_variables.h
   prism_effect_variables.h
   prism_qol_variables.h
   prism_theme_variables.h
@@ -2638,6 +2641,7 @@ if(CLIENT)
     prism.h
     prism_assist.cpp
     prism_assist.h
+    prism_atmosphere.h
     prism_effects.h
     prism_effects_render.h
     prism_input.h

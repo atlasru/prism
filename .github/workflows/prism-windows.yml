@@ -1,7 +1,7 @@
 name: Prism Windows
 on:
   push:
-    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, feature/prism-phase3-qol-identity, feature/prism-visual-identity-vnext, main]
+    branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, feature/prism-phase3-qol-identity, feature/prism-visual-identity-vnext, feature/prism-atmosphere-glow, main]
   pull_request:
     branches: [feature/prism-v0.1.0-windows, feature/prism-overlay-ui, feature/prism-phase3-qol-identity, main]
   workflow_dispatch:

@@ -1084,6 +1084,9 @@ ERunCommandReturnTypes CCommandProcessorFragment_OpenGL::RunCommand(const CComma
 	case CCommandBuffer::CMD_TEXT_TEXTURE_UPDATE:
 		Cmd_TextTexture_Update(static_cast<const CCommandBuffer::SCommand_TextTexture_Update *>(pBaseCommand));
 		break;
+	case CCommandBuffer::CMD_PRISM_ATMOSPHERE:
+		Cmd_Atmosphere(static_cast<const CCommandBuffer::SCommand_Atmosphere *>(pBaseCommand));
+		break;
 	case CCommandBuffer::CMD_CLEAR:
 		Cmd_Clear(static_cast<const CCommandBuffer::SCommand_Clear *>(pBaseCommand));
 		break;

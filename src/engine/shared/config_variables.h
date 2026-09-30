@@ -12,11 +12,12 @@
 #endif
 
 // Prism settings use the normal DDNet config persistence and range validation.
-#include "prism_variables.h"
-#include "prism_qol_variables.h"
 #include "prism_assist_variables.h"
+#include "prism_atmosphere_variables.h"
 #include "prism_effect_variables.h"
+#include "prism_qol_variables.h"
 #include "prism_theme_variables.h"
+#include "prism_variables.h"
 MACRO_CONFIG_INT(PrismPreset, prism_preset, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Prism preset identity: 0 Default, 1 Clean, 2 Competitive, 3 Cinematic, 4 Custom; use prism_apply_preset to apply")
 MACRO_CONFIG_INT(PrismOverlay, prism_overlay, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show FPS and average frame time")
 

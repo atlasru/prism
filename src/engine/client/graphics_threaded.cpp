@@ -731,6 +731,16 @@ void CGraphics_Threaded::TextureSet(CTextureHandle TextureId)
 	m_State.m_Texture = TextureId.Id();
 }
 
+void CGraphics_Threaded::RenderAtmosphere(const float *pParameters)
+{
+	if(!SupportsAtmosphere())
+		return;
+	FlushVertices();
+	CCommandBuffer::SCommand_Atmosphere Cmd;
+	std::copy(pParameters, pParameters + 16, Cmd.m_aParameters);
+	AddCmd(Cmd);
+}
+
 void CGraphics_Threaded::Clear(float r, float g, float b, bool ForceClearNow)
 {
 	CCommandBuffer::SCommand_Clear Cmd;

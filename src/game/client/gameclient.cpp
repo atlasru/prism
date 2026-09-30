@@ -2,8 +2,6 @@
 /* If you are missing that file, acquire a complete release at teeworlds.com.                */
 
 #include "gameclient.h"
-#include "prism.h"
-#include "prism_version.h"
 
 #include "components/background.h"
 #include "components/binds.h"
@@ -42,6 +40,9 @@
 #include "lineinput.h"
 #include "prediction/entities/character.h"
 #include "prediction/entities/projectile.h"
+#include "prism.h"
+#include "prism_atmosphere.h"
+#include "prism_version.h"
 #include "race.h"
 #include "render.h"
 
@@ -122,14 +123,15 @@ void CGameClient::OnConsoleInit()
 #undef MACRO_CONFIG_INT
 #undef MACRO_CONFIG_COL
 
-	m_pStorage = Kernel()->RequestInterface<IStorage>();
-	m_pDemoPlayer = Kernel()->RequestInterface<IDemoPlayer>();
-	m_pServerBrowser = Kernel()->RequestInterface<IServerBrowser>();
-	m_pEditor = Kernel()->RequestInterface<IEditor>();
-	m_pFavorites = Kernel()->RequestInterface<IFavorites>();
-	m_pFriends = Kernel()->RequestInterface<IFriends>();
-	m_pFoes = Client()->Foes();
-	m_pDiscord = Kernel()->RequestInterface<IDiscord>();
+ Console()->Register("prism_atmosphere_preset", "i[preset]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) { PrismAtmosphere::ApplyPreset(g_Config, pResult->GetInteger(0)); }, this, "Atmosphere preset: 0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom");
+ m_pStorage = Kernel()->RequestInterface<IStorage>();
+ m_pDemoPlayer = Kernel()->RequestInterface<IDemoPlayer>();
+ m_pServerBrowser = Kernel()->RequestInterface<IServerBrowser>();
+ m_pEditor = Kernel()->RequestInterface<IEditor>();
+ m_pFavorites = Kernel()->RequestInterface<IFavorites>();
+ m_pFriends = Kernel()->RequestInterface<IFriends>();
+ m_pFoes = Client()->Foes();
+ m_pDiscord = Kernel()->RequestInterface<IDiscord>();
 #if defined(CONF_AUTOUPDATE)
 	m_pUpdater = Kernel()->RequestInterface<IUpdater>();
 #endif
@@ -970,9 +972,25 @@ void CGameClient::OnRender()
 
 	UpdateSpectatorCursor();
 
-	// render all systems
+	// World post processing ends before nameplates, freeze bars, HUD and menus.
+	if(g_Config.m_PrismAtmosphere || g_Config.m_PrismAtmospherePreset != PrismAtmosphere::OFF)
+		PrismAtmosphere::Validate(g_Config);
 	for(auto &pComponent : m_vpAll)
+	{
+		if(pComponent == &m_NamePlates && PrismAtmosphere::WorldEnabled(g_Config.m_PrismEnabled,
+							  g_Config.m_PrismAtmosphere, Client()->State() == IClient::STATE_ONLINE || Client()->State() == IClient::STATE_DEMOPLAYBACK,
+							  Graphics()->SupportsAtmosphere()))
+		{
+			const ColorRGBA Tint = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismAtmosphereTint, true));
+			const float aParameters[] = {
+				g_Config.m_PrismExposure / 100.0f, g_Config.m_PrismContrast / 100.0f, g_Config.m_PrismSaturation / 100.0f, g_Config.m_PrismGamma / 100.0f,
+				g_Config.m_PrismHighlights / 100.0f, g_Config.m_PrismShadows / 100.0f, g_Config.m_PrismBloomStrength / 100.0f, g_Config.m_PrismBloomThreshold / 100.0f,
+				static_cast<float>(g_Config.m_PrismBloomRadius), g_Config.m_PrismVignette / 100.0f, 0, 0,
+				Tint.r, Tint.g, Tint.b, Tint.a * g_Config.m_PrismTintStrength / 100.0f};
+			Graphics()->RenderAtmosphere(aParameters);
+		}
 		pComponent->OnRender();
+	}
 
 	// clear all events/input for this frame
 	Input()->Clear();

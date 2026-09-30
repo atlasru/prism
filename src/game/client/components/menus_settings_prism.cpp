@@ -1,21 +1,24 @@
 // Prism additions, distributed under the zlib license in license.txt.
 #include "menus.h"
-#include <game/client/gameclient.h>
-
-#include <algorithm>
-#include <cmath>
 
 #include <engine/shared/config.h>
+
+#include <game/client/gameclient.h>
 #include <game/client/prism.h>
+#include <game/client/prism_atmosphere.h>
 #include <game/client/prism_qol.h>
 #include <game/client/prism_theme.h>
 #include <game/client/prism_ui.h>
 #include <game/client/prism_version.h>
 #include <game/client/ui_scrollregion.h>
 
+#include <algorithm>
+#include <cmath>
+
 void CMenus::RenderSettingsPrism(CUIRect Screen)
 {
 	Prism::Validate(g_Config);
+	PrismAtmosphere::Validate(g_Config);
 	const bool Animate = g_Config.m_PrismAnimations && !g_Config.m_PrismReducedMotion && g_Config.m_PrismThemeAnimation > 0;
 	const float Duration = std::max(0.01f, g_Config.m_PrismThemeAnimation / 1000.0f);
 	const float Motion = Animate ? 1.0f - std::exp(-std::clamp(Client()->RenderFrameTime(), 0.0f, 0.1f) * 4.0f / Duration) : 1.0f;
@@ -307,7 +310,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	auto Color = [&](const char *pLabel, unsigned *pValue, int Index) {
 		CUIRect Row = NextRow(27.0f);
 		if(!Scroll.RectClipped(Row))
-			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false, nullptr, Index == 9 || Index == 10);
+			DoLine_ColorPicker(&s_aColors[Index], 24.0f, 12.0f, 3.0f, &Row, pLabel, pValue, ColorRGBA(0.65f, 0.78f, 0.91f, 1.0f), false, nullptr, Index == 9 || Index == 10 || Index == 11 || Index == 12);
 	};
 
 
@@ -389,7 +392,63 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
                 IGraphics::CORNER_ALL, 9.0f, 0.45f, g_Config.m_PrismPreset == i ? ColorRGBA(0.39f, 0.56f, 0.71f, 0.43f) : ColorRGBA(0.34f, 0.42f, 0.50f, 0.18f)))
                 Prism::ApplyPreset(g_Config, i);
         }
-        Label("Tee   /   local player");
+	Label("Player Glow  /  soft aura");
+	Toggle("Enable Player Glow", &g_Config.m_PrismPlayerGlow);
+	Toggle("Local player", &g_Config.m_PrismGlowLocal);
+	Toggle("Other visible players", &g_Config.m_PrismGlowOthers);
+	Toggle("Connected dummy", &g_Config.m_PrismGlowDummy);
+	Slider("Glow intensity (%)", &g_Config.m_PrismGlowIntensity, 0, 400);
+	Slider("Glow radius (world units)", &g_Config.m_PrismGlowRadius, 8, 192);
+	Slider("Glow alpha (%)", &g_Config.m_PrismGlowAlpha, 0, 100);
+	Slider("Glow falloff (100 = linear)", &g_Config.m_PrismGlowSoftness, 25, 800);
+	Slider("Color mode: accent / entity / custom", &g_Config.m_PrismGlowColorMode, 0, 2);
+	Color("Custom glow color", &g_Config.m_PrismGlowColor, 11);
+	const auto AtmosphereBefore = PrismAtmosphere::Capture(g_Config);
+	Label("Atmosphere  /  world only");
+	if(!Graphics()->SupportsAtmosphere())
+		Label("Atmosphere requires OpenGL 3.3+; settings remain saved");
+	else
+	{
+		Toggle("Enable Atmosphere", &g_Config.m_PrismAtmosphere);
+		static const char *s_apAtmospherePresets[] = {"Off", "Subtle", "Cinematic", "Vivid", "Custom"};
+		static CButtonContainer s_aAtmospherePresets[5];
+		for(int i = 0; i < 5; ++i)
+		{
+			CUIRect Row = NextRow(29.0f);
+			if(!Scroll.RectClipped(Row) && DoButton_Menu(&s_aAtmospherePresets[i], s_apAtmospherePresets[i],
+							       g_Config.m_PrismAtmospherePreset == i, &Row))
+				PrismAtmosphere::ApplyPreset(g_Config, i);
+		}
+		Slider("Exposure (100 = +1 stop)", &g_Config.m_PrismExposure, -400, 400);
+		Slider("Contrast (%)", &g_Config.m_PrismContrast, 0, 400);
+		Slider("Saturation (%)", &g_Config.m_PrismSaturation, 0, 400);
+		Slider("Gamma (100 = 1.0)", &g_Config.m_PrismGamma, 25, 400);
+		Slider("Highlights (%)", &g_Config.m_PrismHighlights, -100, 100);
+		Slider("Shadows (%)", &g_Config.m_PrismShadows, -100, 100);
+		Slider("Bloom strength (%)", &g_Config.m_PrismBloomStrength, 0, 500);
+		Slider("Bloom threshold (%)", &g_Config.m_PrismBloomThreshold, 0, 100);
+		Slider("Bloom radius (screen pixels)", &g_Config.m_PrismBloomRadius, 1, 32);
+		Slider("Vignette (%)", &g_Config.m_PrismVignette, 0, 100);
+		Slider("Tint strength (%)", &g_Config.m_PrismTintStrength, 0, 100);
+		Color("Tint color + alpha", &g_Config.m_PrismAtmosphereTint, 12);
+	}
+	const auto AtmosphereAfter = PrismAtmosphere::Capture(g_Config);
+	if(AtmosphereBefore.m_PrismAtmospherePreset == AtmosphereAfter.m_PrismAtmospherePreset &&
+		(AtmosphereBefore.m_PrismAtmosphere != AtmosphereAfter.m_PrismAtmosphere ||
+			AtmosphereBefore.m_PrismExposure != AtmosphereAfter.m_PrismExposure ||
+			AtmosphereBefore.m_PrismContrast != AtmosphereAfter.m_PrismContrast ||
+			AtmosphereBefore.m_PrismSaturation != AtmosphereAfter.m_PrismSaturation ||
+			AtmosphereBefore.m_PrismGamma != AtmosphereAfter.m_PrismGamma ||
+			AtmosphereBefore.m_PrismHighlights != AtmosphereAfter.m_PrismHighlights ||
+			AtmosphereBefore.m_PrismShadows != AtmosphereAfter.m_PrismShadows ||
+			AtmosphereBefore.m_PrismBloomStrength != AtmosphereAfter.m_PrismBloomStrength ||
+			AtmosphereBefore.m_PrismBloomThreshold != AtmosphereAfter.m_PrismBloomThreshold ||
+			AtmosphereBefore.m_PrismBloomRadius != AtmosphereAfter.m_PrismBloomRadius ||
+			AtmosphereBefore.m_PrismVignette != AtmosphereAfter.m_PrismVignette ||
+			AtmosphereBefore.m_PrismTintStrength != AtmosphereAfter.m_PrismTintStrength ||
+			AtmosphereBefore.m_PrismAtmosphereTint != AtmosphereAfter.m_PrismAtmosphereTint))
+		g_Config.m_PrismAtmospherePreset = PrismAtmosphere::CUSTOM;
+	Label("Tee   /   local player");
         Toggle("Outline", &g_Config.m_PrismLocalOutline);
         Slider("Outline width", &g_Config.m_PrismLocalOutlineWidth, 1, 8);
         Color("Outline color", &g_Config.m_PrismLocalOutlineColor, 0);
@@ -722,4 +781,5 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Ui()->DoLabel(&Footer, "PRISM " PRISM_VERSION "  /  Insert or Esc", 9.0f, TEXTALIGN_MC);
 	TextRender()->SetFontPreset(EFontPreset::DEFAULT_FONT);
 	Prism::Validate(g_Config);
+	PrismAtmosphere::Validate(g_Config);
 }
