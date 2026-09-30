@@ -1,6 +1,5 @@
 // Render-only settings; intentionally no include guard (DDNet X-macros).
 MACRO_CONFIG_INT(PrismAtmosphere, prism_atmosphere, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Enable world atmosphere (OpenGL 3.3+)")
-MACRO_CONFIG_INT(PrismAtmospherePreset, prism_atmosphere_preset, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom; use prism_atmosphere_preset")
 MACRO_CONFIG_INT(PrismExposure, prism_exposure, 0, -400, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Exposure in hundredths of a stop")
 MACRO_CONFIG_INT(PrismContrast, prism_contrast, 100, 0, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Contrast percent")
 MACRO_CONFIG_INT(PrismSaturation, prism_saturation, 100, 0, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Saturation percent")
@@ -23,3 +22,5 @@ MACRO_CONFIG_INT(PrismGlowSoftness, prism_glow_softness, 200, 25, 800, CFGFLAG_C
 MACRO_CONFIG_INT(PrismGlowColorMode, prism_glow_color_mode, 0, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Aura color: 0 accent, 1 entity body, 2 custom")
 MACRO_CONFIG_COL(PrismAtmosphereTint, prism_atmosphere_tint, 4278190335u, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Atmosphere tint (HSLA)")
 MACRO_CONFIG_COL(PrismGlowColor, prism_glow_color, 4278190335u, CFGFLAG_CLIENT | CFGFLAG_SAVE | CFGFLAG_COLALPHA, "Player aura color (HSLA)")
+// Identity is serialized last, after all values have been restored.
+MACRO_CONFIG_INT(PrismAtmospherePreset, prism_atmosphere_preset, 0, 0, 4, CFGFLAG_CLIENT | CFGFLAG_SAVE, "0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom; use prism_atmosphere_preset")

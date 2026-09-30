@@ -434,19 +434,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	}
 	const auto AtmosphereAfter = PrismAtmosphere::Capture(g_Config);
 	if(AtmosphereBefore.m_PrismAtmospherePreset == AtmosphereAfter.m_PrismAtmospherePreset &&
-		(AtmosphereBefore.m_PrismAtmosphere != AtmosphereAfter.m_PrismAtmosphere ||
-			AtmosphereBefore.m_PrismExposure != AtmosphereAfter.m_PrismExposure ||
-			AtmosphereBefore.m_PrismContrast != AtmosphereAfter.m_PrismContrast ||
-			AtmosphereBefore.m_PrismSaturation != AtmosphereAfter.m_PrismSaturation ||
-			AtmosphereBefore.m_PrismGamma != AtmosphereAfter.m_PrismGamma ||
-			AtmosphereBefore.m_PrismHighlights != AtmosphereAfter.m_PrismHighlights ||
-			AtmosphereBefore.m_PrismShadows != AtmosphereAfter.m_PrismShadows ||
-			AtmosphereBefore.m_PrismBloomStrength != AtmosphereAfter.m_PrismBloomStrength ||
-			AtmosphereBefore.m_PrismBloomThreshold != AtmosphereAfter.m_PrismBloomThreshold ||
-			AtmosphereBefore.m_PrismBloomRadius != AtmosphereAfter.m_PrismBloomRadius ||
-			AtmosphereBefore.m_PrismVignette != AtmosphereAfter.m_PrismVignette ||
-			AtmosphereBefore.m_PrismTintStrength != AtmosphereAfter.m_PrismTintStrength ||
-			AtmosphereBefore.m_PrismAtmosphereTint != AtmosphereAfter.m_PrismAtmosphereTint))
+		!PrismAtmosphere::EqualAtmosphere(AtmosphereBefore, AtmosphereAfter))
 		g_Config.m_PrismAtmospherePreset = PrismAtmosphere::CUSTOM;
 	Label("Tee   /   local player");
         Toggle("Outline", &g_Config.m_PrismLocalOutline);

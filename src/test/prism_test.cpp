@@ -595,8 +595,26 @@ protected:
 		for(auto &Variable : m_Variables)
 			Variable->Register();
 		m_Console.StoreCommands(false);
+		auto Changed = [](IConsole::IResult *pResult, void *pUserData, IConsole::FCommandCallback Callback, void *pCallbackData) {
+			auto &C = *static_cast<CConfig *>(pUserData);
+			const auto Before = PrismAtmosphere::Capture(C);
+			Callback(pResult, pCallbackData);
+			if(pResult->NumArguments())
+				PrismAtmosphere::ValuesChanged(C, Before);
+		};
+		for(auto &Variable : m_Variables)
+			m_Console.Chain(Variable->m_pScriptName, Changed, &m_Config);
 	}
 };
+
+TEST_F(PrismAtmosphereConfig, ExactDefaultValues)
+{
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) EXPECT_EQ(m_Config.m_##Name, Def);
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) EXPECT_EQ(m_Config.m_##Name, Def);
+#include <engine/shared/prism_atmosphere_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
+}
 
 TEST_F(PrismAtmosphereConfig, DefaultsAndAllConsoleRangeBounds)
 {
@@ -606,10 +624,9 @@ TEST_F(PrismAtmosphereConfig, DefaultsAndAllConsoleRangeBounds)
 	EXPECT_EQ(m_Config.m_PrismBloomStrength, 0);
 	EXPECT_EQ(color_cast<ColorRGBA>(ColorHSLA(m_Config.m_PrismAtmosphereTint, true)), ColorRGBA(1, 1, 1, 1));
 #define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) \
-	EXPECT_EQ(m_Config.m_##Name, Def); \
-	m_Console.ExecuteLine(#ScriptName " 2147483647"); \
+	m_Console.ExecuteLine(#ScriptName " 2147483646"); \
 	EXPECT_EQ(m_Config.m_##Name, Max); \
-	m_Console.ExecuteLine(#ScriptName " -2147483648"); \
+	m_Console.ExecuteLine(#ScriptName " -2147483647"); \
 	EXPECT_EQ(m_Config.m_##Name, Min);
 #define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc)
 #include <engine/shared/prism_atmosphere_variables.h>
@@ -665,8 +682,8 @@ TEST_F(PrismAtmosphereConfig, AllSettingsRoundTripIncludingColorAlpha)
 	PrismAtmosphere::ApplyPreset(m_Config, PrismAtmosphere::CINEMATIC);
 	m_Console.ExecuteLine("prism_exposure 137");
 	m_Console.ExecuteLine("prism_glow_radius 192");
-	m_Console.ExecuteLine("prism_glow_color $8055AAFF");
-	m_Console.ExecuteLine("prism_atmosphere_tint $40112233");
+	m_Console.ExecuteLine("prism_glow_color $55AAFF80");
+	m_Console.ExecuteLine("prism_atmosphere_tint $11223340");
 	PrismAtmosphere::Validate(m_Config);
 	const auto Before = PrismAtmosphere::Capture(m_Config);
 	std::vector<std::string> Lines;
@@ -732,4 +749,28 @@ TEST(PrismAtmosphere, ColorModesAndMonotonicFiniteFalloff)
 		}
 		EXPECT_FLOAT_EQ(Previous, 0);
 	}
+}
+
+TEST(PrismAtmosphere, AuraClipsAtWallsCornersAndNarrowPassages)
+{
+	const vec2 From(16, 16);
+	const auto Wall = [](int X, int Y) { return X == 1; };
+	auto End = PrismAtmosphere::ClipAuraRay(From, vec2(192, 16), Wall);
+	EXPECT_GT(End.x, 31.4f);
+	EXPECT_LT(End.x, 31.5f);
+	EXPECT_FLOAT_EQ(End.y, 16);
+	EXPECT_EQ(PrismAtmosphere::ClipAuraRay(From, From, Wall), From);
+	EXPECT_EQ(PrismAtmosphere::ClipAuraRay(From, vec2(16, 192), Wall), vec2(16, 192));
+	const auto Corridor = [](int X, int Y) { return Y != 0; };
+	EXPECT_EQ(PrismAtmosphere::ClipAuraRay(From, vec2(192, 16), Corridor), vec2(192, 16));
+	End = PrismAtmosphere::ClipAuraRay(From, vec2(192, 192), Corridor);
+	EXPECT_LT(End.x, 31.5f);
+	EXPECT_LT(End.y, 31.5f);
+	const auto NegativeWall = [](int X, int Y) { return X == -1; };
+	EXPECT_GT(PrismAtmosphere::ClipAuraRay(From, vec2(-192, 16), NegativeWall).x, -0.5f);
+	const auto StartBlocked = [](int X, int Y) { return true; };
+	EXPECT_EQ(PrismAtmosphere::ClipAuraRay(From, vec2(192, 16), StartBlocked), From);
+	int Calls = 0;
+	PrismAtmosphere::ClipAuraRay(From, vec2(208, 208), [&](int X, int Y) { ++Calls; return false; });
+	EXPECT_LT(Calls, 64);
 }

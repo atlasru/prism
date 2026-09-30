@@ -629,7 +629,7 @@ void CPlayers::RenderPlayer(
 		Alpha = g_Config.m_ClRaceGhostAlpha / 100.0f;
 	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1))
 		RenderPrismPlayer(ClientId, Position, Alpha, Local);
-	const bool Dummy = ClientId >= 0 && ClientId == GameClient()->m_aLocalIds[!g_Config.m_ClDummy];
+	const bool Dummy = Client()->DummyConnected() && ClientId >= 0 && ClientId == GameClient()->m_aLocalIds[!g_Config.m_ClDummy];
 	if(g_Config.m_PrismEnabled && in_range(ClientId, MAX_CLIENTS - 1) && Alpha > 0 &&
 		PrismAtmosphere::GlowEnabled(g_Config.m_PrismPlayerGlow, Local, Dummy,
 			g_Config.m_PrismGlowLocal, g_Config.m_PrismGlowOthers, g_Config.m_PrismGlowDummy))
@@ -646,9 +646,10 @@ void CPlayers::RenderPlayer(
 			const float Radius = g_Config.m_PrismGlowRadius;
 			for(int i = 0; i < SECTORS; ++i)
 			{
-				const vec2 End = Position + direction(i * 2 * pi / SECTORS) * Radius;
-				vec2 Before;
-				aEdge[i] = Collision()->IntersectLine(Position, End, nullptr, &Before) ? Before : End;
+				const vec2 End = Position + PrismAtmosphere::AuraDirections()[i] * Radius;
+				aEdge[i] = PrismAtmosphere::ClipAuraRay(Position, End, [&](int X, int Y) {
+					return Collision()->CheckPoint(X * 32.0f + 16, Y * 32.0f + 16);
+				});
 			}
 			aEdge[SECTORS] = aEdge[0];
 			Graphics()->TextureClear();

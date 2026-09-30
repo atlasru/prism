@@ -123,6 +123,17 @@ void CGameClient::OnConsoleInit()
 #undef MACRO_CONFIG_INT
 #undef MACRO_CONFIG_COL
 
+ auto AtmosphereChanged = [](IConsole::IResult *pResult, void *, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
+	 const auto Before = PrismAtmosphere::Capture(g_Config);
+	 pfnCallback(pResult, pCallbackUserData);
+	 if(pResult->NumArguments())
+		 PrismAtmosphere::ValuesChanged(g_Config, Before);
+ };
+#define MACRO_CONFIG_INT(Name, ScriptName, Def, Min, Max, Flags, Desc) Console()->Chain(#ScriptName, AtmosphereChanged, this);
+#define MACRO_CONFIG_COL(Name, ScriptName, Def, Flags, Desc) Console()->Chain(#ScriptName, AtmosphereChanged, this);
+#include <engine/shared/prism_atmosphere_variables.h>
+#undef MACRO_CONFIG_INT
+#undef MACRO_CONFIG_COL
  Console()->Register("prism_atmosphere_preset", "i[preset]", CFGFLAG_CLIENT, [](IConsole::IResult *pResult, void *) { PrismAtmosphere::ApplyPreset(g_Config, pResult->GetInteger(0)); }, this, "Atmosphere preset: 0 Off, 1 Subtle, 2 Cinematic, 3 Vivid, 4 Custom");
  m_pStorage = Kernel()->RequestInterface<IStorage>();
  m_pDemoPlayer = Kernel()->RequestInterface<IDemoPlayer>();
