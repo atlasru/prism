@@ -2641,6 +2641,10 @@ if(CLIENT)
     prism.h
     prism_assist.cpp
     prism_assist.h
+    prism_route.h
+    prism_weapon.cpp
+    prism_weapon.h
+    prism_shot.h
     prism_atmosphere.h
     prism_effects.h
     prism_effects_render.h
@@ -3367,9 +3371,39 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     DEPENDS ${TARGET_TESTRUNNER}
     USES_TERMINAL
   )
+  # Client prediction classes share names with server classes. Keep physics
+  # fixtures in a separate executable to avoid ODR/linkage collisions.
+  if(CLIENT)
+    file(GLOB PRISM_PREDICTION_SOURCES CONFIGURE_DEPENDS src/game/client/prediction/*.cpp src/game/client/prediction/entities/*.cpp)
+    add_executable(prism-physics-tests EXCLUDE_FROM_ALL
+      src/test/prism_physics_test.cpp
+      ${PRISM_PREDICTION_SOURCES}
+      src/game/client/laser_data.cpp
+      src/game/client/pickup_data.cpp
+      src/game/client/projectile_data.cpp
+      src/generated/client_data.cpp
+      $<TARGET_OBJECTS:engine-gfx>
+      $<TARGET_OBJECTS:engine-shared>
+      $<TARGET_OBJECTS:game-shared>
+      $<TARGET_OBJECTS:rust-bridge-shared>
+      ${DEPS}
+    )
+    target_link_libraries(prism-physics-tests ${PNG_LIBRARIES} ${GTEST_LIBRARIES} ${LIBS_CLIENT})
+    target_include_directories(prism-physics-tests SYSTEM PRIVATE ${GTEST_INCLUDE_DIRS})
+    list(APPEND TARGETS_OWN prism-physics-tests)
+    list(APPEND TARGETS_LINK prism-physics-tests)
+    add_custom_target(run_prism_physics_tests
+      COMMAND $<TARGET_FILE:prism-physics-tests> --gtest_output=xml:prism-physics-tests.xml
+      DEPENDS prism-physics-tests
+      USES_TERMINAL
+    )
+  endif()
   add_custom_target(run_tests
     DEPENDS run_cxx_tests
   )
+  if(CLIENT)
+    add_dependencies(run_tests run_prism_physics_tests)
+  endif()
   if(NOT MSVC OR CMAKE_BUILD_TYPE STREQUAL Release)
     # On MSVC, Rust tests only work in the release mode because we link our C++
     # code with the debug C standard library (/MTd) but Rust only supports

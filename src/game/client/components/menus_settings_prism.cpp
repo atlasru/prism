@@ -316,7 +316,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 
     // Phase 3 navigation and editors. All controls edit saved DDNet configuration.
     // Existing visual presets affect visuals only; all QoL preferences are separate.
-    static CButtonContainer s_aActionButtons[32];
+    static CButtonContainer s_aActionButtons[40];
     auto Button = [&](const char *pText, int Id, const ColorRGBA &Tint = ColorRGBA(0.37f, 0.47f, 0.58f, 0.25f)) {
         CUIRect Row = NextRow(29.0f);
         return !Scroll.RectClipped(Row) && DoButton_Menu(&s_aActionButtons[Id], pText, 0, &Row, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.41f, Tint);
@@ -330,6 +330,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     switch(m_PrismCategory)
     {
     case 7: // Bounded local prediction and input assistance
+    {
         Label("Assist   /   local prediction");
         Toggle("Hook Assist (hold Hook)", &g_Config.m_PrismHookAssist);
         Slider("Hook target FOV (degrees)", &g_Config.m_PrismHookFov, 5, 180);
@@ -343,8 +344,44 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
             g_Config.m_PrismFreezeAvoid = (g_Config.m_PrismFreezeAvoid + 1) % 3;
         Slider("Prediction horizon (ticks)", &g_Config.m_PrismFreezeHorizon, 4, 24);
         Toggle("Show trajectory debug", &g_Config.m_PrismFreezeDebug);
-        Label("Manual direction and macros retain priority.");
+        Toggle("Intent Pathfinder", &g_Config.m_PrismPathfinder);
+        Slider("Route horizon (ticks)", &g_Config.m_PrismPathHorizon, 50, 150);
+        Slider("Planner budget (microseconds)", &g_Config.m_PrismPathBudget, 250, 4000);
+        Toggle("Route debug", &g_Config.m_PrismPathDebug);
+        Label("Aim   /   weapon profiles");
+        static int s_WeaponProfile = 0;
+        static const char *s_apWeapons[] = {"Hammer", "Gun", "Shotgun", "Grenade", "Laser"};
+        char aWeapon[64];
+        str_format(aWeapon, sizeof(aWeapon), "Weapon: %s", s_apWeapons[s_WeaponProfile]);
+        if(Button(aWeapon, 31)) s_WeaponProfile = (s_WeaponProfile + 1) % 5;
+        struct SProfileControls { int *m_pEnabled, *m_pActivation, *m_pFov, *m_pRange, *m_pPrediction, *m_pCorrection, *m_pSmoothing, *m_pPriority, *m_pDebug; };
+#define PRISM_PROFILE_CONTROLS(Name) {&g_Config.m_PrismAim##Name, &g_Config.m_PrismAim##Name##Activation, &g_Config.m_PrismAim##Name##Fov, &g_Config.m_PrismAim##Name##Range, &g_Config.m_PrismAim##Name##Prediction, &g_Config.m_PrismAim##Name##Correction, &g_Config.m_PrismAim##Name##Smoothing, &g_Config.m_PrismAim##Name##Priority, &g_Config.m_PrismAim##Name##Debug}
+        const SProfileControls aProfiles[] = {PRISM_PROFILE_CONTROLS(Hammer), PRISM_PROFILE_CONTROLS(Gun), PRISM_PROFILE_CONTROLS(Shotgun), PRISM_PROFILE_CONTROLS(Grenade), PRISM_PROFILE_CONTROLS(Laser)};
+#undef PRISM_PROFILE_CONTROLS
+        const auto &Profile = aProfiles[s_WeaponProfile];
+        Toggle("Enable weapon aim", Profile.m_pEnabled);
+        if(Button(*Profile.m_pActivation ? "Activation: Always" : "Activation: Hold Fire", 32)) *Profile.m_pActivation ^= 1;
+        Slider("Weapon FOV (degrees)", Profile.m_pFov, 5, 180);
+        Slider("Weapon range", Profile.m_pRange, 16, s_WeaponProfile == 0 ? 96 : 1600);
+        if(s_WeaponProfile < 4 && s_WeaponProfile != 2)
+            Slider("Target motion prediction (%)", Profile.m_pPrediction, 0, 100);
+        Slider("Max correction (degrees)", Profile.m_pCorrection, 1, 45);
+        Slider("Aim smoothing (%)", Profile.m_pSmoothing, 1, 100);
+        if(Button(*Profile.m_pPriority ? "Target: Nearest" : "Target: Closest aim", 33)) *Profile.m_pPriority ^= 1;
+        if(s_WeaponProfile == 4) Toggle("Confirm laser bounce shots", &g_Config.m_PrismAimLaserBounce);
+        Toggle("Weapon debug", Profile.m_pDebug);
+        Label("Unfreeze   /   confirmed actions");
+        Toggle("Self (preemptive laser bounce)", &g_Config.m_PrismUnfreezeSelf);
+        Toggle("Frozen teammate rescue", &g_Config.m_PrismUnfreezeOthers);
+        if(Button(g_Config.m_PrismUnfreezeActivation ? "Rescue: Automatic" : "Rescue: Hold Fire", 34)) g_Config.m_PrismUnfreezeActivation ^= 1;
+        Slider("Rescue FOV (degrees)", &g_Config.m_PrismUnfreezeFov, 5, 180);
+        Slider("Rescue range", &g_Config.m_PrismUnfreezeRange, 32, 1600);
+        if(Button(g_Config.m_PrismUnfreezePriority ? "Rescue target: Nearest" : "Rescue target: Closest aim", 35)) g_Config.m_PrismUnfreezePriority ^= 1;
+        Slider("Rescue cooldown (ticks)", &g_Config.m_PrismUnfreezeCooldown, 5, 150);
+        Toggle("Rescue debug", &g_Config.m_PrismUnfreezeDebug);
+        Label("Hook / macros own aim first. Frozen tees cannot fire.");
         break;
+    }
     case 6: // Settings and status
     {
         Label("Prism   /   Control center");

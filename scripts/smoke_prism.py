@@ -17,7 +17,7 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     cwd = Path(directory)
     (cwd / 'storage.cfg').write_text(f'add_path {cwd.as_posix()}\nadd_path {package.as_posix()}\n')
     def run(commands):
-        args = [str(package / 'Prism.exe'), 'gfx_backend opengl', 'gfx_gl_major 1',
+        args = [str(package / ('Prism.exe' if sys.platform == 'win32' else 'Prism')), 'gfx_backend opengl', 'gfx_gl_major 1',
                 'gfx_gl_minor 4', 'gfx_fullscreen 0', 'gfx_screen_width 800',
                 'gfx_screen_height 600', 'snd_enable 0', 'cl_show_welcome 0', *commands, 'quit']
         result = subprocess.run(args, cwd=cwd, capture_output=True, text=True, errors='replace', timeout=90)
@@ -87,9 +87,38 @@ with tempfile.TemporaryDirectory(prefix='prism-smoke-') as directory:
     values = run([])
     for key, value in assist.items():
         assert values.get(key) == value, (key, values)
+    values = run(['prism_pathfinder 1', 'prism_path_horizon 123', 'prism_path_budget 1200',
+                  'prism_aim_hammer 1', 'prism_aim_hammer_fov 23',
+                  'prism_aim_gun 1', 'prism_aim_gun_fov 34',
+                  'prism_aim_shotgun 1', 'prism_aim_shotgun_fov 45',
+                  'prism_aim_grenade 1', 'prism_aim_grenade_fov 56',
+                  'prism_aim_laser 1', 'prism_aim_laser_fov 67', 'prism_aim_laser_bounce 1',
+                  'prism_unfreeze_self 1', 'prism_unfreeze_others 1',
+                  'prism_unfreeze_activation 1', 'prism_unfreeze_cooldown 49'])
+    planner_weapons = {'prism_pathfinder': '1', 'prism_path_horizon': '123', 'prism_path_budget': '1200',
+                      'prism_aim_hammer': '1', 'prism_aim_hammer_fov': '23',
+                      'prism_aim_gun': '1', 'prism_aim_gun_fov': '34',
+                      'prism_aim_shotgun': '1', 'prism_aim_shotgun_fov': '45',
+                      'prism_aim_grenade': '1', 'prism_aim_grenade_fov': '56',
+                      'prism_aim_laser': '1', 'prism_aim_laser_fov': '67', 'prism_aim_laser_bounce': '1',
+                      'prism_unfreeze_self': '1', 'prism_unfreeze_others': '1',
+                      'prism_unfreeze_activation': '1', 'prism_unfreeze_cooldown': '49'}
+    for _ in range(5):
+        for key, value in planner_weapons.items():
+            assert values.get(key) == value, (key, values)
+        values = run([])
+    values = run(['prism_path_horizon 9999', 'prism_path_budget -50', 'prism_aim_hammer_range 999',
+                  'prism_aim_laser_correction 999', 'prism_unfreeze_cooldown -20'])
+    for key, value in {'prism_path_horizon': '150', 'prism_path_budget': '250',
+                       'prism_aim_hammer_range': '96', 'prism_aim_laser_correction': '45',
+                       'prism_unfreeze_cooldown': '5'}.items():
+        assert values.get(key) == value, (key, values)
     values = run(['prism_emergency_stop'])
     assert values.get('prism_hook_assist', '0') == '0', values
     assert values.get('prism_freeze_avoid', '0') == '0', values
+    for key in ['prism_aim_hammer', 'prism_aim_gun', 'prism_aim_shotgun', 'prism_aim_grenade',
+                'prism_aim_laser', 'prism_unfreeze_self', 'prism_unfreeze_others']:
+        assert values.get(key, '0') == '0', (key, values)
     values = run(['prism_apply_atmosphere_preset 2', 'prism_exposure 137',
                   'prism_player_glow 1', 'prism_glow_radius 151',
                   'prism_glow_color $55AAFF80'])

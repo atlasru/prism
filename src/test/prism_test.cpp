@@ -774,3 +774,104 @@ TEST(PrismAtmosphere, AuraClipsAtWallsCornersAndNarrowPassages)
 	PrismAtmosphere::ClipAuraRay(From, vec2(208, 208), [&](int X, int Y) { ++Calls; return false; });
 	EXPECT_LT(Calls, 64);
 }
+
+#include <game/client/prism_route.h>
+#include <game/client/prism_weapon.h>
+
+TEST(PrismRoute, IntentPreservesDirectionJumpHookAndRecentMotion)
+{
+    PrismRoute::SIntent Intent;
+    Intent.m_Direction = 1; Intent.m_Vel = vec2(-5, 0);
+    EXPECT_GT(Intent.Heading().x, 0);
+    Intent.m_Jump = true;
+    EXPECT_LT(Intent.Heading().y, 0);
+    Intent.m_Direction = 0; Intent.m_Jump = false; Intent.m_Vel = vec2(0, 0);
+    Intent.m_Hook = true; Intent.m_Aim = vec2(-100, -100);
+    EXPECT_LT(Intent.Heading().x, 0); EXPECT_LT(Intent.Heading().y, 0);
+    Intent.m_Hook = false; Intent.m_RecentMotion = vec2(0, 5);
+    EXPECT_GT(Intent.Heading().y, 0);
+}
+TEST(PrismRoute, SafeManualAlwaysWinsAndTimeoutUsesLegacyFallback)
+{
+    PrismAssist::STrajectory Paths[2];
+    Paths[0].m_Count = Paths[1].m_Count = 2;
+    PrismRoute::SRoute Route;
+    Route.m_Count = 2; Route.m_Confidence = 1; Route.m_aPoints[1] = Route.m_Waypoint = vec2(100, 0); Route.m_Heading = vec2(1, 0);
+    EXPECT_FALSE(PrismRoute::SelectCorrection(Paths, 2, 1, false, false, 1, Route, 1).m_Apply);
+    Paths[0].m_FirstHazard = 1;
+    Route.m_Confidence = 0; Route.m_Mode = PrismRoute::EMode::BUDGET;
+    EXPECT_EQ(PrismRoute::SelectCorrection(Paths, 2, 1, false, false, 1, Route, 1).m_Selected,
+        PrismAssist::SelectCorrection(Paths, 2, 1, false, 2, false, 1).m_Selected);
+}
+TEST(PrismRoute, RouteRejoinBeatsArbitraryClearanceAndKeepsEquivalentChoice)
+{
+    PrismAssist::STrajectory Paths[4];
+    for(auto &Path : Paths) { Path.m_Count = 2; Path.m_Direction = 1; }
+    Paths[0].m_FirstHazard = 1;
+    Paths[1].m_aStates[1].m_Pos = vec2(-30, 90); Paths[1].m_MinSafetyMargin = 100;
+    Paths[2].m_aStates[1].m_Pos = vec2(50, 4); Paths[3].m_aStates[1].m_Pos = vec2(50, -4);
+    PrismRoute::SRoute Route;
+    Route.m_Count = 2; Route.m_Confidence = 1; Route.m_aPoints[1] = Route.m_Waypoint = vec2(100, 0); Route.m_Heading = vec2(1, 0);
+    EXPECT_EQ(PrismRoute::SelectCorrection(Paths, 4, 1, false, false, 1, Route, 3).m_Selected, 3);
+    for(int i = 0; i < 100; ++i)
+        EXPECT_EQ(PrismRoute::SelectCorrection(Paths, 4, 1, false, false, 1, Route, 3).m_Selected, 3);
+    Paths[2].m_FirstHazard = Paths[3].m_FirstHazard = 1;
+    const auto Emergency = PrismRoute::SelectCorrection(Paths, 4, 1, false, false, 1, Route, 3);
+    EXPECT_TRUE(Emergency.m_Apply); EXPECT_FALSE(Emergency.m_RoutePreserving);
+}
+TEST(PrismWeapon, IndependentProfilesAndNinjaHasNoAimSolver)
+{
+    CConfig Config{};
+    Config.m_PrismAimGun = 1; Config.m_PrismAimGunFov = 25;
+    Config.m_PrismAimLaser = 0; Config.m_PrismAimLaserFov = 70;
+    EXPECT_TRUE(PrismWeapon::Profile(WEAPON_GUN, Config).m_Enabled);
+    EXPECT_EQ(PrismWeapon::Profile(WEAPON_GUN, Config).m_Fov, 25);
+    EXPECT_FALSE(PrismWeapon::Profile(WEAPON_LASER, Config).m_Enabled);
+    EXPECT_EQ(PrismWeapon::Profile(WEAPON_LASER, Config).m_Fov, 70);
+    EXPECT_FALSE(PrismWeapon::Profile(WEAPON_NINJA, Config).m_Enabled);
+    EXPECT_EQ(DefaultConfig::PrismPathfinder, 0);
+    EXPECT_EQ(DefaultConfig::PrismUnfreezeSelf, 0);
+    EXPECT_EQ(DefaultConfig::PrismAimHammer, 0);
+}
+TEST(PrismWeapon, DisabledActivationOwnershipAndAngularLimit)
+{
+    PrismWeapon::SProfile Profile;
+    PrismWeapon::SSolution Solution; Solution.m_Valid = true; Solution.m_Aim = vec2(100, 10);
+    EXPECT_FALSE(PrismWeapon::Active(Profile, true, false));
+    EXPECT_EQ(PrismWeapon::CorrectAim(vec2(100, 0), Solution, Profile), vec2(100, 0));
+    Profile.m_Enabled = true;
+    EXPECT_FALSE(PrismWeapon::Active(Profile, false, false));
+    EXPECT_FALSE(PrismWeapon::Active(Profile, true, true));
+    EXPECT_TRUE(PrismWeapon::Active(Profile, true, false));
+    Profile.m_Activation = 1;
+    EXPECT_TRUE(PrismWeapon::Active(Profile, false, false));
+    Solution.m_Aim = vec2(-100, 0);
+    EXPECT_EQ(PrismWeapon::CorrectAim(vec2(100, 0), Solution, Profile), vec2(100, 0));
+}
+TEST(PrismWeapon, ProjectileInterceptionMatchesCalcPosWithSpawnOffset)
+{
+    const vec2 Origin(100, 100), Target(400, 120), Velocity(0, 2);
+    const CTuningParams Tuning;
+    const auto Solution = PrismWeapon::Intercept(Origin, Target, Velocity, Tuning.m_GunSpeed, Tuning.m_GunCurvature, Tuning.m_GunLifetime);
+    ASSERT_TRUE(Solution.m_Valid);
+    const vec2 Direction = normalize(Solution.m_Aim);
+    const vec2 Impact = CalcPos(Origin + Direction * (CCharacterCore::PhysicalSize() * 0.75f), Direction, Tuning.m_GunCurvature, Tuning.m_GunSpeed, Solution.m_Time);
+    EXPECT_LT(distance(Impact, Target + Velocity * Solution.m_Time * SERVER_TICK_SPEED), 0.1f);
+    EXPECT_FALSE(PrismWeapon::Intercept(Origin, Target, vec2(1000, 0), 100, 0, 1).m_Valid);
+}
+TEST(PrismUnfreeze, ActualSupportedMechanicsAndNoUncontrolledFire)
+{
+    EXPECT_TRUE(PrismWeapon::CanUnfreeze(WEAPON_LASER, true, true, false));
+    EXPECT_FALSE(PrismWeapon::CanUnfreeze(WEAPON_LASER, true, true, true));
+    EXPECT_FALSE(PrismWeapon::CanUnfreeze(WEAPON_HAMMER, true, true, false));
+    EXPECT_TRUE(PrismWeapon::CanUnfreeze(WEAPON_HAMMER, false, true, false));
+    EXPECT_FALSE(PrismWeapon::CanUnfreeze(WEAPON_GRENADE, false, true, false));
+    PrismWeapon::CUnfreezeDecision Decision;
+    EXPECT_FALSE(Decision.Commit(100, 40, false, false, true));
+    EXPECT_FALSE(Decision.Commit(100, 40, true, true, true));
+    EXPECT_FALSE(Decision.Commit(100, 40, true, false, false));
+    EXPECT_TRUE(Decision.Commit(100, 40, true, false, true));
+    for(int Tick = 100; Tick < 140; ++Tick) EXPECT_FALSE(Decision.Commit(Tick, 40, true, false, true));
+    EXPECT_TRUE(Decision.Commit(140, 40, true, false, true));
+    Decision.Reset(); EXPECT_TRUE(Decision.Ready(0));
+}

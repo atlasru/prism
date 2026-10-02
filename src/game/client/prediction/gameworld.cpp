@@ -635,15 +635,19 @@ void CGameWorld::NetObjEnd()
 	}
 }
 
-void CGameWorld::CopyWorld(CGameWorld *pFrom)
+void CGameWorld::CopyWorld(CGameWorld *pFrom, bool Detached)
 {
 	if(pFrom == this || !pFrom)
 		return;
 	m_IsValidCopy = false;
-	m_pParent = pFrom;
-	if(m_pParent->m_pChild && m_pParent->m_pChild != this)
-		m_pParent->m_pChild->m_IsValidCopy = false;
-	pFrom->m_pChild = this;
+	m_pParent = Detached ? nullptr : pFrom;
+	if(Detached) m_pChild = nullptr;
+	if(!Detached)
+	{
+		if(m_pParent->m_pChild && m_pParent->m_pChild != this)
+			m_pParent->m_pChild->m_IsValidCopy = false;
+		pFrom->m_pChild = this;
+	}
 
 	m_GameTick = pFrom->m_GameTick;
 	m_pCollision = pFrom->m_pCollision;
@@ -680,8 +684,10 @@ void CGameWorld::CopyWorld(CGameWorld *pFrom)
 				pCopy = new CPlasma(*((CPlasma *)pEnt));
 			if(pCopy)
 			{
-				pCopy->m_pParent = pEnt;
-				pEnt->m_pChild = pCopy;
+				pCopy->m_pParent = Detached ? nullptr : pEnt;
+				if(Detached) pCopy->m_pChild = nullptr;
+				if(!Detached)
+					pEnt->m_pChild = pCopy;
 				this->InsertEntity(pCopy);
 			}
 		}

@@ -19,6 +19,7 @@ public:
 	const vec2 &GetFrom() const { return m_From; }
 	const int &GetOwner() const { return m_Owner; }
 	const int &GetEvalTick() const { return m_EvalTick; }
+	int GetHitClientId() const { return m_HitClientId; }
 	CLaser(CGameWorld *pGameWorld, int Id, CLaserData *pLaser);
 	bool Match(CLaser *pLaser);
 	CLaserData GetData() const;
@@ -41,6 +42,7 @@ private:
 	vec2 m_PrevPos;
 	int m_Type;
 	int m_TuneZone;
+	int m_HitClientId = -1;
 };
 
 #endif

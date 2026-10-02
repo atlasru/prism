@@ -6,6 +6,8 @@
 #include "render.h"
 #include "prism_qol.h"
 #include "prism_assist.h"
+#include "prism_route.h"
+#include "prism_shot.h"
 
 #include <base/color.h>
 #include <base/types.h>
@@ -176,6 +178,20 @@ public:
 	// Phase 3: only client-side input composition, never prediction/physics/protocol.
 	PrismQol::CMacroEngine m_PrismMacros;
 	PrismAssist::CPredictor m_PrismPredictor;
+	PrismRoute::CIntentPlanner m_PrismPlanner;
+	PrismWeapon::CShotPredictor m_PrismShotPredictor;
+	PrismWeapon::CUnfreezeDecision m_PrismUnfreezeDecision;
+	int m_PrismAimTarget = -1, m_PrismAimWeapon = -1;
+	int m_PrismAssistTick = -1, m_PrismUnfreezeSearchTick = -1;
+	int m_PrismWeaponTick = -1;
+	vec2 m_PrismRecentPos = vec2(0, 0), m_PrismRecentMotion = vec2(0, 0);
+	vec2 m_PrismWeaponOrigin = vec2(0, 0), m_PrismWeaponAim = vec2(0, 0), m_PrismWeaponHit = vec2(0, 0);
+	vec2 m_PrismWeaponLastManual = vec2(0, 0);
+	vec2 m_PrismAimOutput = vec2(0, 0), m_PrismAimManual = vec2(0, 0);
+	bool m_PrismWeaponApplied = false;
+	bool m_PrismWeaponDebug = false, m_PrismUnfreezeConfirmed = false;
+	void PrismResetPlanning();
+	bool PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFire, bool MacroFireOwned);
 	std::array<PrismAssist::STrajectory, PrismAssist::MAX_CANDIDATES> m_aPrismAssistPaths{};
 	int m_PrismAssistPathCount = 0;
 	int m_PrismAssistSelected = 0;

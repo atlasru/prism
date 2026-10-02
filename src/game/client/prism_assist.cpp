@@ -13,7 +13,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	m_PrismHookDebugReady = false;
 	if(!ManualHook || !g_Config.m_PrismHookAssist)
 		m_PrismHookTargetId = -1;
-	if(!g_Config.m_PrismHookAssist && !g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismHookDebug && !g_Config.m_PrismFreezeDebug)
+	if(!g_Config.m_PrismHookAssist && !g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismHookDebug && !g_Config.m_PrismFreezeDebug && !g_Config.m_PrismPathDebug)
 	{
 		m_PrismAssistPathCount = 0;
 		m_PrismAvoidHookOwned = false;
@@ -88,23 +88,34 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 				Input.m_TargetX = 1;
 		}
 	}
+	const bool PreviousValid = m_PrismAssistSelected > 0 && m_PrismAssistSelected < m_PrismAssistPathCount;
+	const auto PreviousAction = PreviousValid ? m_aPrismAssistPaths[m_PrismAssistSelected].m_aActions[0] : PrismAssist::SAction{};
 	m_PrismAssistPathCount = 0;
 	m_PrismAssistSelected = 0;
 	m_PrismAvoidHookCandidateCount = 0;
 	m_PrismAvoidRouteCandidate = -1;
 	m_PrismAvoidEmergencyCandidate = -1;
 	m_PrismAvoidDeferred = false;
-	m_PrismAvoidJumpCooldown = std::max(0, m_PrismAvoidJumpCooldown - 1);
+	const bool NewTick = m_PrismAssistTick != World.GameTick();
+	if(NewTick)
+	{
+		m_PrismAvoidJumpCooldown = std::max(0, m_PrismAvoidJumpCooldown - 1);
+		if(m_PrismAssistTick >= 0 && distance(Local.m_Pos, m_PrismRecentPos) < 128)
+			m_PrismRecentMotion = Local.m_Pos - m_PrismRecentPos;
+		else m_PrismRecentMotion = vec2(0, 0);
+		m_PrismRecentPos = Local.m_Pos;
+		m_PrismAssistTick = World.GameTick();
+	}
 	if(ManualDirection)
 	{
 		m_PrismAvoidIntentDirection = ManualDirection;
 		m_PrismAvoidIntentTicks = 8;
 	}
-	else if(m_PrismAvoidIntentTicks > 0)
+	else if(NewTick && m_PrismAvoidIntentTicks > 0)
 		--m_PrismAvoidIntentTicks;
-	else
+	else if(m_PrismAvoidIntentTicks == 0)
 		m_PrismAvoidIntentDirection = 0;
-	if((!g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismFreezeDebug) || Local.m_Super || Local.m_Invincible || Local.m_IsInFreeze ||
+	if((!g_Config.m_PrismFreezeAvoid && !g_Config.m_PrismFreezeDebug && !g_Config.m_PrismPathDebug) || Local.m_Super || Local.m_Invincible || Local.m_IsInFreeze ||
 		!m_PrismPredictor.Begin(World, m_Snap.m_LocalClientId))
 	{
 		m_PrismAvoidHookOwned = false;
@@ -135,10 +146,35 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 		SimulateActions(&Action, 1, pHookPoint);
 	};
 	Simulate(Input.m_Direction, Input.m_Jump != 0);
+	if(g_Config.m_PrismPathfinder && NewTick)
+	{
+		PrismRoute::SIntent Intent;
+		Intent.m_Pos = Local.m_Pos; Intent.m_Vel = Local.m_Vel;
+		Intent.m_Aim = ManualAim; Intent.m_Direction = ManualDirection;
+		Intent.m_RecentDirection = m_PrismAvoidIntentDirection; Intent.m_RecentMotion = m_PrismRecentMotion;
+		Intent.m_Jump = ManualJump; Intent.m_Hook = ManualHook;
+		Intent.m_DirectionOwned = MacroDirectionOwned; Intent.m_HookOwned = MacroHookOwned;
+		std::array<vec2, 4> aAnchors{};
+		int Anchors = 0;
+		// Static geometry is already cached by CCollision. Only four local rays.
+		if(!ManualHook && !MacroHookOwned && m_PrismAssistPathCount && !m_aPrismAssistPaths[0].Safe())
+			for(float Angle : {-pi / 2, -pi / 3, -pi / 6, pi / 6})
+			{
+				vec2 Hit, Before;
+				int Tele = 0;
+				const vec2 Ray(std::cos(Angle) * (Travel ? Travel : 1), std::sin(Angle));
+				const int Tile = Collision()->IntersectLineTeleHook(Local.m_Pos, Local.m_Pos + Ray * static_cast<float>(Local.m_Tuning.m_HookLength), &Hit, &Before, &Tele);
+				if(PrismAssist::HookableImpact(Tile, Tele)) aAnchors[Anchors++] = Hit;
+			}
+		m_PrismPlanner.Plan(m_PrismPredictor, Input, Intent, World.GameTick(), g_Config.m_PrismPathHorizon,
+			g_Config.m_PrismPathBudget, aAnchors.data(), Anchors);
+	}
+	if(!g_Config.m_PrismPathfinder) m_PrismPlanner.Reset();
 	if(m_PrismAssistPathCount == 0 || m_aPrismAssistPaths[0].Safe() || m_aPrismAssistPaths[0].m_Unknown || g_Config.m_PrismFreezeAvoid != 2)
 	{
 		m_PrismAvoidLastDirection = 0;
 		m_PrismAvoidHookOwned = false;
+		m_PrismPlanner.Recovery(false);
 		return;
 	}
 	const bool CanJump = !Input.m_Jump && !ManualJump && !m_PrismAvoidJumpCooldown && Local.m_Jumps > Local.m_JumpedTotal;
@@ -156,6 +192,12 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 				if(Direction != Input.m_Direction && !MacroDirectionOwned)
 					Simulate(Direction, true);
 	}
+	if(g_Config.m_PrismPathfinder && m_PrismPlanner.Route().Valid() && !MacroDirectionOwned)
+		for(int Duration : {3, 6})
+		{
+			PrismAssist::SAction aActions[2] = {{0, false, Duration}, {Input.m_Direction, Input.m_Jump != 0, Horizon}};
+			SimulateActions(aActions, 2);
+		}
 	// Search only after a concrete hazard. Raycasts use the same hook collision
 	// primitive as DDNet's core; reject teleports, blockers and duplicate faces.
 	// Retain an active point first so a useful recovery is not retargeted each tick.
@@ -210,8 +252,18 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 			if(!Route && m_PrismAvoidEmergencyCandidate < 0)
 				m_PrismAvoidEmergencyCandidate = i;
 		}
-	auto Correction = PrismAssist::SelectCorrection(m_aPrismAssistPaths.data(), m_PrismAssistPathCount, ManualDirection, ManualJump, 2, MacroDirectionOwned, Travel);
-	if(Correction.m_Apply && !Correction.m_Hook && m_PrismAvoidLastDirection && Correction.m_Direction != m_PrismAvoidLastDirection)
+	int PreviousSelection = -1;
+	if(PreviousValid)
+		for(int i = 1; i < m_PrismAssistPathCount; ++i)
+		{
+			const auto &Action = m_aPrismAssistPaths[i].m_aActions[0];
+			if(Action.m_Direction == PreviousAction.m_Direction && Action.m_Jump == PreviousAction.m_Jump &&
+				Action.m_Hook == PreviousAction.m_Hook && (!Action.m_Hook || distance(Action.m_HookAim, PreviousAction.m_HookAim) < 20))
+				PreviousSelection = i;
+		}
+	auto Correction = PrismRoute::SelectCorrection(m_aPrismAssistPaths.data(), m_PrismAssistPathCount,
+		ManualDirection, ManualJump, MacroDirectionOwned, Travel, m_PrismPlanner.Route(), PreviousSelection);
+	if(!m_PrismPlanner.Route().Valid() && Correction.m_Apply && !Correction.m_Hook && m_PrismAvoidLastDirection && Correction.m_Direction != m_PrismAvoidLastDirection)
 		for(int i = 1; i < m_PrismAssistPathCount; ++i)
 			if(!m_aPrismAssistPaths[i].m_Hook && m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_Direction == m_PrismAvoidLastDirection &&
 				m_aPrismAssistPaths[i].m_Jump == Correction.m_Jump &&
@@ -223,7 +275,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 				Correction.m_Selected = i;
 				break;
 			}
-	if(Correction.m_Apply && m_PrismAvoidHookOwned &&
+	if(!m_PrismPlanner.Route().Valid() && Correction.m_Apply && m_PrismAvoidHookOwned &&
 		(Correction.m_Hook || Correction.m_Direction != Input.m_Direction))
 		for(int i = 1; i < m_PrismAssistPathCount; ++i)
 			if(m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_HookAttached &&
@@ -258,6 +310,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	}
 	if(Correction.m_Apply)
 	{
+		m_PrismPlanner.Recovery(!Correction.m_RoutePreserving);
 		Input.m_Direction = Correction.m_Direction;
 		Input.m_Jump = Correction.m_Jump;
 		m_PrismAssistSelected = Correction.m_Selected;
@@ -286,7 +339,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 
 void CGameClient::PrismRenderAssistDebug()
 {
-	if(!PrismInputAllowed() || (!g_Config.m_PrismFreezeDebug && !g_Config.m_PrismHookDebug && g_Config.m_PrismFreezeAvoid != 1))
+	if(!PrismInputAllowed() || (!g_Config.m_PrismFreezeDebug && !g_Config.m_PrismHookDebug && !g_Config.m_PrismPathDebug && !m_PrismWeaponDebug && g_Config.m_PrismFreezeAvoid != 1))
 		return;
 	const ColorRGBA Accent = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_PrismThemeAccent));
 	Graphics()->TextureClear();
@@ -373,8 +426,47 @@ void CGameClient::PrismRenderAssistDebug()
 			}
 		}
 	}
+	if(g_Config.m_PrismPathDebug && m_PrismPlanner.Route().Valid())
+	{
+		const auto &Route = m_PrismPlanner.Route();
+		Graphics()->SetColor(ColorRGBA(0.2f, 0.9f, 0.75f, 0.6f));
+		for(int i = 1; i < Route.m_Count; ++i)
+		{
+			const vec2 A = Route.m_aPoints[i - 1], B = Route.m_aPoints[i];
+			const vec2 Delta = B - A;
+			const vec2 Normal = length(Delta) > 0.01f ? vec2(-Delta.y, Delta.x) / length(Delta) * Route.m_Radius : vec2(0, 0);
+			const IGraphics::CLineItem Lines[] = {{A, B}, {A + Normal, B + Normal}, {A - Normal, B - Normal}};
+			Graphics()->LinesDraw(Lines, 3);
+		}
+		const vec2 P = Route.m_Waypoint;
+		const IGraphics::CLineItem Cross[] = {{P - vec2(6, 0), P + vec2(6, 0)}, {P - vec2(0, 6), P + vec2(0, 6)}};
+		Graphics()->LinesDraw(Cross, 2);
+	}
+	if(m_PrismWeaponDebug)
+	{
+		Graphics()->SetColor(m_PrismUnfreezeConfirmed ? ColorRGBA(0.5f, 1, 0.5f, 0.8f) : ColorRGBA(0.65f, 0.65f, 1, 0.8f));
+		const IGraphics::CLineItem Line(m_PrismWeaponOrigin, m_PrismWeaponOrigin + m_PrismWeaponAim);
+		Graphics()->LinesDraw(&Line, 1);
+	}
 	Graphics()->LinesEnd();
 	Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+	if(g_Config.m_PrismPathDebug)
+	{
+		const auto &Route = m_PrismPlanner.Route();
+		const auto &Stats = m_PrismPlanner.Stats();
+		char aStatus[192];
+		str_format(aStatus, sizeof(aStatus), "Route %s %.0f%%  %.0f/%.0f us avg/worst  candidates %d  cache %llu timeout %llu",
+			PrismRoute::ModeName(Route.m_Mode), Route.m_Confidence * 100, Stats.AverageUs(), Stats.m_WorstUs,
+			Stats.m_Candidates, static_cast<unsigned long long>(Stats.m_CacheHits), static_cast<unsigned long long>(Stats.m_Timeouts));
+		TextRender()->Text(m_PrismRecentPos.x - 55, m_PrismRecentPos.y - 88, 9, aStatus);
+	}
+	if(m_PrismWeaponDebug)
+	{
+		char aStatus[96];
+		str_format(aStatus, sizeof(aStatus), "Weapon %d target %d %s verify %.0f us", m_PrismAimWeapon, m_PrismAimTarget,
+			m_PrismUnfreezeConfirmed ? "RESCUE CONFIRMED" : "AIM", m_PrismShotPredictor.m_LastUs);
+		TextRender()->Text(m_PrismWeaponOrigin.x - 55, m_PrismWeaponOrigin.y - 101, 9, aStatus);
+	}
 	if(g_Config.m_PrismHookDebug && m_PrismHookDebugReady)
 	{
 		char aStatus[96];

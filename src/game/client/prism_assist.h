@@ -2,6 +2,7 @@
 #ifndef GAME_CLIENT_PRISM_ASSIST_H
 #define GAME_CLIENT_PRISM_ASSIST_H
 
+#include <base/time.h>
 #include <game/client/prediction/entities/character.h>
 #include <game/client/prediction/gameworld.h>
 #include <game/collision.h>
@@ -18,6 +19,7 @@ constexpr int MAX_TICKS = 24;
 constexpr int MAX_CANDIDATES = 18;
 constexpr int MAX_HOOK_CANDIDATES = 6;
 constexpr int MAX_PHASES = 3;
+constexpr int MAX_ROUTE_TICKS = 150;
 inline int ClampHorizon(int Horizon) { return std::clamp(Horizon, 1, MAX_TICKS); }
 inline bool HazardTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DFREEZE || Tile == TILE_LFREEZE || Tile == TILE_DEATH; }
 inline bool HazardLayers(int Game, int Front) { return HazardTile(Game) || HazardTile(Front); }
@@ -25,6 +27,21 @@ inline bool FreezeTile(int Tile) { return Tile == TILE_FREEZE || Tile == TILE_DF
 inline bool CenterHazard(int Game, int Front) { return HazardLayers(Game, Front); }
 inline bool CornerHazard(int Game, int Front) { return Game == TILE_DEATH || Front == TILE_DEATH; }
 inline bool HookableImpact(int Tile, int Tele) { return Tile == TILE_SOLID && Tele == 0; }
+// Tile-driven ability changes belong to full character prediction, not the core.
+inline bool UnsupportedTile(int Tile)
+{
+	switch(Tile)
+	{
+	case TILE_WALLJUMP: case TILE_REFILL_JUMPS: case TILE_JUMP:
+	case TILE_EHOOK_ENABLE: case TILE_EHOOK_DISABLE:
+	case TILE_NPC_ENABLE: case TILE_NPC_DISABLE: case TILE_NPH_ENABLE: case TILE_NPH_DISABLE:
+	case TILE_SOLO_ENABLE: case TILE_SOLO_DISABLE:
+	case TILE_UNLIMITED_JUMPS_ENABLE: case TILE_UNLIMITED_JUMPS_DISABLE:
+	case TILE_JETPACK_ENABLE: case TILE_JETPACK_DISABLE:
+		return true;
+	default: return false;
+	}
+}
 // GetCollisionAt returns only solid/death tiles. Freeze lives in the raw
 // game/front layers and must be sampled by index instead.
 inline bool HazardAt(const CCollision &Collision, vec2 Pos)
@@ -74,7 +91,7 @@ struct SAction
 
 struct STrajectory
 {
-	std::array<SState, MAX_TICKS + 1> m_aStates{};
+	std::array<SState, MAX_ROUTE_TICKS + 1> m_aStates{};
 	int m_Count = 0;
 	int m_FirstHazard = -1;
 	bool m_Unknown = false;
@@ -153,6 +170,10 @@ class CPredictor
 {
 	CWorldCore m_World;
 	CCharacterCore m_Initial;
+	std::array<CCharacterCore, MAX_CLIENTS> m_aInitialOthers{};
+	std::array<CCharacterCore, MAX_CLIENTS> m_aOthers{};
+	std::array<bool, MAX_CLIENTS> m_aPresent{};
+	int64_t m_DeadlineUs = 0;
 	CCollision *m_pCollision = nullptr;
 	CTeamsCore *m_pTeams = nullptr;
 	int m_LocalId = -1;
@@ -163,6 +184,7 @@ class CPredictor
 		// DDNet applies freeze at the character center. Its death check also
 		// samples corners. Treating neighboring freeze at corners as impact
 		// made traversable one-tile corridors appear unsafe.
+		Unknown |= Pos.x < 0 || Pos.y < 0 || Pos.x >= m_pCollision->GetWidth() * 32 || Pos.y >= m_pCollision->GetHeight() * 32;
 		const int CenterIndex = m_pCollision->GetPureMapIndex(Pos);
 		Hazard |= CenterHazard(m_pCollision->GetTileIndex(CenterIndex), m_pCollision->GetFrontTileIndex(CenterIndex));
 		const float Radius = CCharacterCore::PhysicalSize() / 3.0f;
@@ -173,7 +195,10 @@ class CPredictor
 				const int Index = m_pCollision->GetPureMapIndex(P);
 				Hazard |= CornerHazard(m_pCollision->GetTileIndex(Index), m_pCollision->GetFrontTileIndex(Index));
 				if(Index >= 0)
-					Unknown |= m_pCollision->IsTeleport(Index) || m_pCollision->IsEvilTeleport(Index) || m_pCollision->IsSpeedup(Index) || m_pCollision->IsTune(Index);
+					Unknown |= m_pCollision->IsTeleport(Index) || m_pCollision->IsEvilTeleport(Index) ||
+						m_pCollision->IsCheckTeleport(Index) || m_pCollision->IsCheckEvilTeleport(Index) ||
+						m_pCollision->IsSpeedup(Index) || m_pCollision->IsTune(Index) || m_pCollision->GetSwitchType(Index) ||
+						UnsupportedTile(m_pCollision->GetTileIndex(Index)) || UnsupportedTile(m_pCollision->GetFrontTileIndex(Index));
 			}
 	}
 	bool NearHazard(vec2 Pos) const
@@ -199,17 +224,50 @@ public:
 		m_Initial = pLocal->GetCore();
 		m_World.m_vSwitchers = Source.m_Core.m_vSwitchers;
 		m_World.m_pPrng = nullptr;
-		std::copy(std::begin(Source.m_Core.m_apCharacters), std::end(Source.m_Core.m_apCharacters), std::begin(m_World.m_apCharacters));
+		for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+		{
+			m_aPresent[Id] = Source.m_Core.m_apCharacters[Id] != nullptr;
+			if(m_aPresent[Id]) m_aInitialOthers[Id] = *Source.m_Core.m_apCharacters[Id];
+		}
+		m_DeadlineUs = 0;
 		m_Ready = true;
 		return true;
 	}
 
+	// Snapshot entry point for deterministic re-simulation and future TAS.
+	void BeginCore(const CCharacterCore &Core, CCollision &Collision, CTeamsCore &Teams)
+	{
+		m_Initial = Core; m_pCollision = &Collision; m_pTeams = &Teams;
+		m_LocalId = 0; m_aPresent.fill(false); m_World.m_vSwitchers.clear();
+		m_World.m_pPrng = nullptr; m_DeadlineUs = 0; m_Ready = true;
+	}
+	void SetDeadline(int64_t DeadlineUs) { m_DeadlineUs = DeadlineUs; }
+	bool SimulateInputs(const CNetObj_PlayerInput *pInputs, int NumInputs, STrajectory &Out)
+	{
+		if(!pInputs || NumInputs < 1 || NumInputs > MAX_ROUTE_TICKS) { Out = {}; return false; }
+		const SAction Placeholder{pInputs[0].m_Direction, pInputs[0].m_Jump != 0, NumInputs};
+		return SimulateSequence(pInputs[0], &Placeholder, 1, NumInputs, Out, pInputs);
+	}
 	bool Simulate(const CNetObj_PlayerInput &Input, const SAction *pActions, int NumActions, int Horizon, STrajectory &Out)
+	{
+		return SimulateSequence(Input, pActions, NumActions, ClampHorizon(Horizon), Out);
+	}
+	bool SimulateSequence(const CNetObj_PlayerInput &Input, const SAction *pActions, int NumActions, int Horizon, STrajectory &Out, const CNetObj_PlayerInput *pTickInputs = nullptr)
 	{
 		Out = {};
 		if(!m_Ready || !pActions || NumActions < 1 || NumActions > MAX_PHASES)
 			return false;
-		Horizon = ClampHorizon(Horizon);
+		Horizon = std::clamp(Horizon, 1, MAX_ROUTE_TICKS);
+		// Speculative hook/collision impulses must never alter live-world cores.
+		for(int Id = 0; Id < MAX_CLIENTS; ++Id)
+		{
+			m_World.m_apCharacters[Id] = nullptr;
+			if(m_aPresent[Id])
+			{
+				m_aOthers[Id] = m_aInitialOthers[Id];
+				m_World.m_apCharacters[Id] = &m_aOthers[Id];
+			}
+		}
 		CCharacterCore Core = m_Initial;
 		Core.SetCoreWorld(&m_World, m_pCollision, m_pTeams);
 		m_World.m_apCharacters[m_LocalId] = &Core;
@@ -220,26 +278,38 @@ public:
 		Out.m_aStates[0].m_Pos = Core.m_Pos;
 		Out.m_aStates[0].m_Vel = Core.m_Vel;
 		Out.m_aStates[0].m_HookPos = Core.m_HookPos;
+		Out.m_aStates[0].m_Jumped = Core.m_Jumped;
+		Out.m_aStates[0].m_HookState = Core.m_HookState;
 		int Phase = 0;
 		int Remaining = std::max(1, pActions[0].m_Ticks);
 		for(int Tick = 1; Tick <= Horizon; ++Tick)
 		{
+			if(m_DeadlineUs && (Tick & 3) == 1 && time_get_nanoseconds().count() / 1000 >= m_DeadlineUs)
+			{
+				Out.m_Unknown = true;
+				break;
+			}
 			if(Remaining-- == 0 && Phase + 1 < NumActions)
 			{
 				++Phase;
 				Remaining = std::max(1, pActions[Phase].m_Ticks) - 1;
 			}
-			Core.m_Input = Input;
-			Core.m_Input.m_Direction = std::clamp(pActions[Phase].m_Direction, -1, 1);
-			Core.m_Input.m_Jump = pActions[Phase].m_Jump && (Tick == 1 || Phase > 0 && Remaining == std::max(1, pActions[Phase].m_Ticks) - 1);
-			if(pActions[Phase].m_Hook)
+			if(pTickInputs)
+				Core.m_Input = pTickInputs[Tick - 1];
+			else
 			{
-				Core.m_Input.m_Hook = 1;
-				Core.m_Input.m_TargetX = round_to_int(pActions[Phase].m_HookAim.x);
-				Core.m_Input.m_TargetY = round_to_int(pActions[Phase].m_HookAim.y);
+				Core.m_Input = Input;
+				Core.m_Input.m_Direction = std::clamp(pActions[Phase].m_Direction, -1, 1);
+				Core.m_Input.m_Jump = pActions[Phase].m_Jump && (Tick == 1 || Phase > 0 && Remaining == std::max(1, pActions[Phase].m_Ticks) - 1);
+				if(pActions[Phase].m_Hook)
+				{
+					Core.m_Input.m_Hook = 1;
+					Core.m_Input.m_TargetX = round_to_int(pActions[Phase].m_HookAim.x);
+					Core.m_Input.m_TargetY = round_to_int(pActions[Phase].m_HookAim.y);
+				}
+				else if(Out.m_Hook)
+					Core.m_Input.m_Hook = 0;
 			}
-			else if(Out.m_Hook)
-				Core.m_Input.m_Hook = 0;
 			Core.Tick(true);
 			Core.Move();
 			Core.Quantize();
@@ -266,6 +336,7 @@ public:
 				break;
 		}
 		Out.m_Score = ScoreTrajectory(Out);
+		m_World.m_apCharacters[m_LocalId] = nullptr;
 		return true;
 	}
 };
