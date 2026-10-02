@@ -352,8 +352,11 @@ int CControls::SnapInput(int *pData)
 	GameClient()->PrismComposeAssist(PrismComposedInput, m_aInputData[Dummy].m_Direction,
 		m_aInputData[Dummy].m_Jump != 0, (Owned & (PrismQol::OWN_LEFT | PrismQol::OWN_RIGHT)) != 0,
 		m_aInputData[Dummy].m_Hook != 0, (Owned & PrismQol::OWN_HOOK) != 0);
+	PrismInput::CFireComposer FirePreview = m_aPrismFire[Dummy];
+	PrismComposedInput.m_Fire = FirePreview.Compose(m_aInputData[Dummy].m_Fire, Pulse, INPUT_STATE_MASK);
+	const bool ManualPress = CountInput(m_aLastData[Dummy].m_Fire, m_aInputData[Dummy].m_Fire).m_Presses > 0;
 	const bool RescuePulse = GameClient()->PrismComposeWeapons(PrismComposedInput,
-		(m_aInputData[Dummy].m_Fire & 1) != 0, Pulse);
+		(m_aInputData[Dummy].m_Fire & 1) != 0, Pulse, ManualPress);
 	PrismComposedInput.m_Fire = m_aPrismFire[Dummy].Compose(m_aInputData[Dummy].m_Fire, Pulse || RescuePulse, INPUT_STATE_MASK);
 	Send = Send || PrismComposedInput.m_Direction != m_aPrismLastOutput[Dummy].m_Direction;
 	Send = Send || PrismComposedInput.m_Jump != m_aPrismLastOutput[Dummy].m_Jump;

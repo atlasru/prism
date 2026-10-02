@@ -191,7 +191,7 @@ public:
 	bool m_PrismWeaponApplied = false;
 	bool m_PrismWeaponDebug = false, m_PrismUnfreezeConfirmed = false;
 	void PrismResetPlanning();
-	bool PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFire, bool MacroFireOwned);
+	bool PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFire, bool MacroFireOwned, bool ManualPress);
 	std::array<PrismAssist::STrajectory, PrismAssist::MAX_CANDIDATES> m_aPrismAssistPaths{};
 	int m_PrismAssistPathCount = 0;
 	int m_PrismAssistSelected = 0;

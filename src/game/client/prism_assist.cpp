@@ -195,7 +195,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 	if(g_Config.m_PrismPathfinder && m_PrismPlanner.Route().Valid() && !MacroDirectionOwned)
 		for(int Duration : {3, 6})
 		{
-			PrismAssist::SAction aActions[2] = {{0, false, Duration}, {Input.m_Direction, Input.m_Jump != 0, Horizon}};
+			PrismAssist::SAction aActions[2] = {{0, Input.m_Jump != 0, Duration}, {Input.m_Direction, Input.m_Jump != 0, Horizon}};
 			SimulateActions(aActions, 2);
 		}
 	// Search only after a concrete hazard. Raycasts use the same hook collision
@@ -262,7 +262,7 @@ void CGameClient::PrismComposeAssist(CNetObj_PlayerInput &Input, int ManualDirec
 				PreviousSelection = i;
 		}
 	auto Correction = PrismRoute::SelectCorrection(m_aPrismAssistPaths.data(), m_PrismAssistPathCount,
-		ManualDirection, ManualJump, MacroDirectionOwned, Travel, m_PrismPlanner.Route(), PreviousSelection);
+		ManualDirection, ManualJump || Input.m_Jump != 0, MacroDirectionOwned, Travel, m_PrismPlanner.Route(), PreviousSelection);
 	if(!m_PrismPlanner.Route().Valid() && Correction.m_Apply && !Correction.m_Hook && m_PrismAvoidLastDirection && Correction.m_Direction != m_PrismAvoidLastDirection)
 		for(int i = 1; i < m_PrismAssistPathCount; ++i)
 			if(!m_aPrismAssistPaths[i].m_Hook && m_aPrismAssistPaths[i].Safe() && m_aPrismAssistPaths[i].m_Direction == m_PrismAvoidLastDirection &&

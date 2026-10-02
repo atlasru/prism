@@ -875,3 +875,27 @@ TEST(PrismUnfreeze, ActualSupportedMechanicsAndNoUncontrolledFire)
     EXPECT_TRUE(Decision.Commit(140, 40, true, false, true));
     Decision.Reset(); EXPECT_TRUE(Decision.Ready(0));
 }
+
+TEST(PrismRoute, HeldOrMacroJumpCannotBeReleasedByRouteCorrection)
+{
+    PrismAssist::STrajectory Paths[3];
+    for(auto &Path : Paths) { Path.m_Count = 2; Path.m_Direction = 1; }
+    Paths[0].m_FirstHazard = 1; Paths[0].m_Jump = true;
+    Paths[1].m_Jump = false; Paths[2].m_Jump = true;
+    PrismRoute::SRoute Route;
+    EXPECT_EQ(PrismRoute::SelectCorrection(Paths, 3, 1, true, false, 1, Route, 0).m_Selected, 2);
+    Paths[2].m_FirstHazard = 1;
+    EXPECT_FALSE(PrismRoute::SelectCorrection(Paths, 3, 1, true, false, 1, Route, 0).m_Apply);
+}
+TEST(PrismUnfreeze, FirePreviewKeepsManualAndWireSourcesSeparate)
+{
+    PrismInput::CFireComposer Composer; Composer.Reset(0, INPUT_STATE_MASK);
+    EXPECT_EQ(Composer.Compose(0, true, INPUT_STATE_MASK), 1);
+    auto Preview = Composer;
+    EXPECT_EQ(Preview.Compose(0, false, INPUT_STATE_MASK), 2);
+    EXPECT_TRUE(Composer.Owned());
+    EXPECT_EQ(Composer.Compose(0, false, INPUT_STATE_MASK), 2);
+    EXPECT_EQ(Composer.Compose(1, true, INPUT_STATE_MASK), 3);
+    EXPECT_FALSE(Composer.Owned());
+    EXPECT_EQ(Composer.Compose(1, false, INPUT_STATE_MASK), 3);
+}

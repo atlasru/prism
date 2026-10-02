@@ -91,8 +91,9 @@ namespace PrismRoute
 		void Reset() { *this = {}; }
 		void Recovery(bool Active)
 		{
+			const bool WasRecovering = m_Recovering;
 			m_Recovering = Active;
-			if(m_Route.Valid())
+			if(m_Route.Valid() && (Active || WasRecovering))
 				m_Route.m_Mode = Active ? EMode::EMERGENCY : EMode::REJOIN;
 		}
 		template<class TSimulator, class TClock>

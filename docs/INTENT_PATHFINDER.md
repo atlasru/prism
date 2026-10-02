@@ -106,7 +106,10 @@ preserve live prediction parent/child links and do not mutate source characters.
 Aim priority is macro/physical Hook/Freeze Avoid-owned Hook, then verified
 Auto Unfreeze, then the current weapon profile, then manual aim. Menu/chat,
 unfocused window, spectator and demo gates remain `PrismInputAllowed`.
-Macros' direction/hook ownership still constrains Freeze Avoid. All automatic
+Macros' direction, jump and hook ownership still constrains Freeze Avoid.
+Pending explicit weapon switches defer weapon/rescue decisions. Hammer rescue
+respects the physical press edge; holding Hammer Fire does not invent repeat
+presses. Verification receives a copy-composed wire fire counter. All automatic
 fire edges go through the existing per-connection `CFireComposer`, with one
 confirmed pulse and at least configured/weapon reload cooldown. F12/emergency
 stop disables new corrective features and clears planner/decision ownership.
@@ -118,7 +121,7 @@ Linux Release client builds with GCC 13, Rust 1.85.1, SDL 2.30.0 and system GTes
 1.14.0. A separate headless client supports actual restart/persistence checks;
 it does not imply visual or gameplay testing.
 
-- Main C++ suite: 409 executed, 408 passed, one environment failure; three
+- Main C++ suite: 411 executed, 410 passed, one environment failure; three
   existing tests remain disabled. No existing test was weakened or excluded.
 - Environment failure is the unchanged Unix socket creation test under this
   execution environment's Unix socket restriction:
@@ -127,7 +130,7 @@ it does not imply visual or gameplay testing.
   /DDNet/src/test/unix_test.cpp:9: Failure
   Expected: (Socket) >= (0), actual: -1 vs 0
   ```
-- Prism unit subset: 52 passed, including independent profiles, gating,
+- Prism unit subset: 54 passed, including independent profiles, gating,
   projectile interception, rescue cooldown and ownership.
 - Separate client physics suite: 18 passed. It covers safe straight travel, low clearance,
   one-tile corridors/openings, dangerous manual input with reachable jump,
@@ -143,8 +146,8 @@ The final Linux Release benchmark of 1,000 calls per scenario measured:
 
 | Scenario | Actual plans | Cache hits | Mean search | Worst search | Candidates | Simulated ticks (last search) |
 |---|---:|---:|---:|---:|---:|---:|
-| Safe straight | 200 | 800 | 96.160 us | 463 us | 1 | 101 |
-| Freeze jump/recovery search | 200 | 800 | 317.620 us | 595 us | 11 | 399 |
+| Safe straight | 200 | 800 | 88.735 us | 190 us | 1 | 101 |
+| Freeze jump/recovery search | 200 | 800 | 342.155 us | 1393 us | 11 | 399 |
 
 No deadline misses occurred in those runs. These are synthetic local fixtures,
 not gameplay FPS measurements or a guarantee on the user's laptop. The physics

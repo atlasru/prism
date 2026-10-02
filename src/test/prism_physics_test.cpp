@@ -146,6 +146,8 @@ TEST_F(CPrismPhysics, SafeStraightRouteNoCorrectionAndCacheHit)
 	PrismRoute::CIntentPlanner Planner;
 	const auto &Route = Plan(Planner);
 	ASSERT_TRUE(Route.Valid());
+	Planner.Recovery(false);
+	EXPECT_EQ(Route.m_Mode, PrismRoute::EMode::CONTINUE);
 	EXPECT_GT(Route.m_Waypoint.x, m_Core.m_Pos.x + 500);
 	EXPECT_EQ(Planner.Stats().m_Candidates, 1);
 	Plan(Planner, 101);

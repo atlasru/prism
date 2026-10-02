@@ -12,7 +12,7 @@ void CGameClient::PrismResetPlanning()
 	m_PrismWeaponApplied = false;
 }
 
-bool CGameClient::PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFire, bool MacroFireOwned)
+bool CGameClient::PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFire, bool MacroFireOwned, bool ManualPress)
 {
 	// One outgoing aim owner: macros/physical Hook/Freeze recovery, then rescue,
 	// then active weapon profile, then unchanged manual aim. Fire has one composer.
@@ -31,6 +31,8 @@ bool CGameClient::PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFir
 	}
 	const auto &Local = *pLocal->Core();
 	const int Weapon = pLocal->GetActiveWeapon();
+	if(Input.m_WantedWeapon > 0 && Input.m_WantedWeapon - 1 != Weapon)
+		return false;
 	const auto Profile = PrismWeapon::Profile(Weapon, g_Config);
 	const bool AimEnabled = PrismWeapon::Active(Profile, ManualFire, AimOwned);
 	const bool RescueEnabled = g_Config.m_PrismUnfreezeSelf || g_Config.m_PrismUnfreezeOthers;
@@ -79,7 +81,7 @@ bool CGameClient::PrismComposeWeapons(CNetObj_PlayerInput &Input, bool ManualFir
 	};
 	const int64_t SearchStart = time_get_nanoseconds().count() / 1000;
 	auto RemainingUs = [&] { return std::max(0, 2500 - static_cast<int>((time_get_nanoseconds().count() / 1000 - SearchStart))); };
-	const bool CanRescueNow = RescueEnabled && m_PrismUnfreezeDecision.Ready(Tick) && !pLocal->GetReloadTimer() &&
+	const bool CanRescueNow = RescueEnabled && !(Weapon == WEAPON_HAMMER && ManualFire && !ManualPress) && m_PrismUnfreezeDecision.Ready(Tick) && !pLocal->GetReloadTimer() &&
 				  (Tick - m_PrismUnfreezeSearchTick >= 5 || m_PrismUnfreezeSearchTick < 0) && PrismWeapon::CShotPredictor::Supported(World);
 	if(CanRescueNow)
 	{
