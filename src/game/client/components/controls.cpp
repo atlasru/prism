@@ -353,7 +353,7 @@ int CControls::SnapInput(int *pData)
 	// Physical Hook ownership is passed separately from macro/synthetic Hook.
 	const bool ManualPress = CountInput(m_aLastData[Dummy].m_Fire, m_aInputData[Dummy].m_Fire).m_Presses > 0;
 	const bool ManualActivity = m_aInputDirectionLeft[Dummy] || m_aInputDirectionRight[Dummy] ||
-		m_aInputData[Dummy].m_Jump || m_aInputData[Dummy].m_Hook || (m_aInputData[Dummy].m_Fire & 1) || ManualPress || Owned;
+		m_aInputData[Dummy].m_Jump || m_aInputData[Dummy].m_Hook || (m_aInputData[Dummy].m_Fire & 1) || ManualPress || Owned || Pulse;
 	const bool PathfinderOwned = GameClient()->PrismComposePathfinder(PrismComposedInput, m_aInputData[Dummy], ManualActivity);
 	if(!PathfinderOwned) GameClient()->PrismComposeAssist(PrismComposedInput, m_aInputData[Dummy].m_Direction,
 		m_aInputData[Dummy].m_Jump != 0, (Owned & (PrismQol::OWN_LEFT | PrismQol::OWN_RIGHT)) != 0,
