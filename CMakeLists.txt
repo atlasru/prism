@@ -2638,6 +2638,14 @@ if(CLIENT)
     prediction/entity.h
     prediction/gameworld.cpp
     prediction/gameworld.h
+    pathfinder/types.cpp
+    pathfinder/types.h
+    pathfinder/simulator.cpp
+    pathfinder/simulator.h
+    pathfinder/map.cpp
+    pathfinder/map.h
+    pathfinder/search.cpp
+    pathfinder/search.h
     prism.h
     prism_assist.cpp
     prism_assist.h
@@ -3377,11 +3385,17 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     file(GLOB PRISM_PREDICTION_SOURCES CONFIGURE_DEPENDS src/game/client/prediction/*.cpp src/game/client/prediction/entities/*.cpp)
     add_executable(prism-physics-tests EXCLUDE_FROM_ALL
       src/test/prism_physics_test.cpp
+      src/test/prism_pathfinder_test.cpp
+      src/game/client/pathfinder/types.cpp
+      src/game/client/pathfinder/simulator.cpp
+      src/game/client/pathfinder/map.cpp
+      src/game/client/pathfinder/search.cpp
       ${PRISM_PREDICTION_SOURCES}
       src/game/client/laser_data.cpp
       src/game/client/pickup_data.cpp
       src/game/client/projectile_data.cpp
       src/generated/client_data.cpp
+      src/generated/client_data.h
       $<TARGET_OBJECTS:engine-gfx>
       $<TARGET_OBJECTS:engine-shared>
       $<TARGET_OBJECTS:game-shared>
