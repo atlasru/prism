@@ -1178,6 +1178,7 @@ void CPlayers::OnRender()
 		RenderPlayer(ScreenRect, &pClientData->m_RenderPrev, &pClientData->m_RenderCur, &aRenderInfo[RenderLastId], RenderLastId);
 	}
 	GameClient()->PrismRenderAssistDebug();
+	GameClient()->PrismRenderPathfinder();
 	// Hidden, absent, filtered or retracted owners never retain a cosmetic history.
 	for(int Id = 0; Id < MAX_CLIENTS; ++Id)
 	{

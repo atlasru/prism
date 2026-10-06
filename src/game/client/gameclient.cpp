@@ -113,6 +113,13 @@ void CGameClient::OnConsoleInit()
  Console()->Register("prism_toggle", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { g_Config.m_PrismEnabled ^= 1; Prism::Validate(g_Config); }, this, "Toggle Prism visuals without changing DDNet settings");
  Console()->Register("prism_reset", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *) { Prism::Reset(g_Config); }, this, "Reset all Prism settings");
  Console()->Register("prism_emergency_stop", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *pUserData) { static_cast<CGameClient *>(pUserData)->PrismEmergencyStop(); }, this, "Stop Double Tee, macros and Assist, releasing owned controls");
+ Console()->Register("prism_solo_start", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { g_Config.m_PrismSoloEnabled = 1; static_cast<CGameClient *>(p)->m_PrismSolo.Resume(); }, this, "Start Solo Pathfinder in selected mode");
+ Console()->Register("prism_solo_stop", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { g_Config.m_PrismSoloEnabled = 0; static_cast<CGameClient *>(p)->m_PrismSolo.Stop("emergency stop"); }, this, "Stop Solo Pathfinder and release input");
+ Console()->Register("prism_solo_pause", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { static_cast<CGameClient *>(p)->m_PrismSolo.Pause(); }, this, "Pause Solo Pathfinder");
+ Console()->Register("prism_solo_resume", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { g_Config.m_PrismSoloEnabled = 1; static_cast<CGameClient *>(p)->m_PrismSolo.Resume(); }, this, "Resume Solo Pathfinder");
+ Console()->Register("prism_solo_replan", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { static_cast<CGameClient *>(p)->m_PrismSolo.Resume(); }, this, "Clear local plan and recover route");
+ Console()->Register("prism_solo_cursor", "", CFGFLAG_CLIENT, [](IConsole::IResult *, void *p) { static_cast<CGameClient *>(p)->PrismPathfinderTarget(true); }, this, "Set manual Pathfinder destination at cursor");
+ Console()->Register("prism_solo_destination", "i[x] i[y]", CFGFLAG_CLIENT, [](IConsole::IResult *r, void *p) { g_Config.m_PrismSoloTarget = 1; g_Config.m_PrismSoloTargetX = std::clamp(r->GetInteger(0), 0, 1000000); g_Config.m_PrismSoloTargetY = std::clamp(r->GetInteger(1), 0, 1000000); static_cast<CGameClient *>(p)->m_PrismSolo.SetGoals({vec2(g_Config.m_PrismSoloTargetX, g_Config.m_PrismSoloTargetY)}); }, this, "Set manual Pathfinder destination in world units");
  auto PrismChanged = [](IConsole::IResult *pResult, void *, IConsole::FCommandCallback pfnCallback, void *pCallbackUserData) {
   pfnCallback(pResult, pCallbackUserData);
   if(pResult->NumArguments()) Prism::Validate(g_Config);
@@ -585,6 +592,7 @@ bool CGameClient::PrismInputAllowed()
 
 void CGameClient::PrismEmergencyStop()
 {
+	g_Config.m_PrismSoloEnabled = 0;
 	PrismResetPlanning();
 	g_Config.m_PrismDoubleEnabled = 0;
 	g_Config.m_PrismHookAssist = 0;
@@ -609,6 +617,7 @@ void CGameClient::PrismEmergencyStop()
 
 void CGameClient::OnDummySwap()
 {
+	g_Config.m_PrismSoloEnabled = 0;
 	PrismResetPlanning();
 	m_PrismMacros.Cancel();
 	m_PrismHookTargetId = -1;

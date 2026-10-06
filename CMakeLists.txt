@@ -2261,6 +2261,7 @@ set_src(ENGINE_SHARED GLOB_RECURSE src/engine/shared
   packer.h
   prism_atmosphere_variables.h
   prism_effect_variables.h
+  prism_pathfinder_variables.h
   prism_qol_variables.h
   prism_theme_variables.h
   prism_variables.h
@@ -2638,6 +2639,8 @@ if(CLIENT)
     prediction/entity.h
     prediction/gameworld.cpp
     prediction/gameworld.h
+    pathfinder/controller.cpp
+    pathfinder/controller.h
     pathfinder/types.cpp
     pathfinder/types.h
     pathfinder/simulator.cpp
@@ -2650,6 +2653,7 @@ if(CLIENT)
     prism_assist.cpp
     prism_assist.h
     prism_route.h
+    prism_pathfinder.cpp
     prism_weapon.cpp
     prism_weapon.h
     prism_shot.h
@@ -3386,6 +3390,7 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     add_executable(prism-physics-tests EXCLUDE_FROM_ALL
       src/test/prism_physics_test.cpp
       src/test/prism_pathfinder_test.cpp
+      src/game/client/pathfinder/controller.cpp
       src/game/client/pathfinder/types.cpp
       src/game/client/pathfinder/simulator.cpp
       src/game/client/pathfinder/map.cpp

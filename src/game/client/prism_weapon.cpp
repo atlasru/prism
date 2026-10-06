@@ -3,6 +3,7 @@
 
 void CGameClient::PrismResetPlanning()
 {
+	m_PrismSolo.Reset();
 	m_PrismPlanner.Reset();
 	m_PrismUnfreezeDecision.Reset();
 	m_PrismAimTarget = m_PrismAimWeapon = -1;

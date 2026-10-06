@@ -8,6 +8,7 @@
 #include "prism_assist.h"
 #include "prism_route.h"
 #include "prism_shot.h"
+#include "pathfinder/controller.h"
 
 #include <base/color.h>
 #include <base/types.h>
@@ -179,6 +180,13 @@ public:
 	PrismQol::CMacroEngine m_PrismMacros;
 	PrismAssist::CPredictor m_PrismPredictor;
 	PrismRoute::CIntentPlanner m_PrismPlanner;
+	PrismPath::CController m_PrismSolo;
+	PrismPath::EStatus m_PrismSoloLoggedStatus = PrismPath::EStatus::IDLE;
+	std::string m_PrismSoloLoggedReason;
+	bool PrismComposePathfinder(CNetObj_PlayerInput &Input, const CNetObj_PlayerInput &Manual, bool ManualActivity);
+	void PrismRenderPathfinder();
+	void PrismRenderPathfinderHud(float Width, float Height);
+	void PrismPathfinderTarget(bool Cursor);
 	PrismWeapon::CShotPredictor m_PrismShotPredictor;
 	PrismWeapon::CUnfreezeDecision m_PrismUnfreezeDecision;
 	int m_PrismAimTarget = -1, m_PrismAimWeapon = -1;

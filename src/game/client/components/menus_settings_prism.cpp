@@ -222,10 +222,10 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 	Content.Draw(Theme.m_Background.WithAlpha(0.83f * Fade), IGraphics::CORNER_ALL, 8.0f);
 	Content.Margin(8.0f, &Content);
 
-	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings", "Assist"};
-	static CButtonContainer s_aTabs[8];
-	static float s_aTabBlend[8] = {};
-	for(int i = 0; i < 8; ++i)
+	static const char *s_apTabs[] = {"Visuals", "HUD", "Input", "QoL", "Macros", "Themes", "Settings", "Assist", "Pathfinder"};
+	static CButtonContainer s_aTabs[9];
+	static float s_aTabBlend[9] = {};
+	for(int i = 0; i < 9; ++i)
 	{
 		CUIRect Tab;
 		Sidebar.HSplitTop(29.0f, &Tab, &Sidebar);
@@ -241,7 +241,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		}
 	}
 
-	static CScrollRegion s_aScroll[8];
+	static CScrollRegion s_aScroll[9];
 	CUIRect ScrollView = Content;
 	CScrollRegion &Scroll = s_aScroll[m_PrismCategory];
 	Scroll.Begin(&ScrollView);
@@ -257,9 +257,9 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 		if(!Scroll.RectClipped(Row))
 			Ui()->DoLabel(&Row, pLabel, 12.0f, TEXTALIGN_ML);
 	};
-	static float s_aaToggleProgress[8][96] = {};
-	static float s_aaToggleHover[8][96] = {};
-	static bool s_aaToggleInitialized[8][96] = {};
+	static float s_aaToggleProgress[9][96] = {};
+	static float s_aaToggleHover[9][96] = {};
+	static bool s_aaToggleInitialized[9][96] = {};
 	int ToggleIndex = 0;
 	auto Toggle = [&](const char *pLabel, int *pValue) {
 		CUIRect Row = NextRow(29.0f);
@@ -316,7 +316,7 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
 
     // Phase 3 navigation and editors. All controls edit saved DDNet configuration.
     // Existing visual presets affect visuals only; all QoL preferences are separate.
-    static CButtonContainer s_aActionButtons[40];
+    static CButtonContainer s_aActionButtons[48];
     auto Button = [&](const char *pText, int Id, const ColorRGBA &Tint = ColorRGBA(0.37f, 0.47f, 0.58f, 0.25f)) {
         CUIRect Row = NextRow(29.0f);
         return !Scroll.RectClipped(Row) && DoButton_Menu(&s_aActionButtons[Id], pText, 0, &Row, BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.41f, Tint);
@@ -329,6 +329,38 @@ void CMenus::RenderSettingsPrism(CUIRect Screen)
     };
     switch(m_PrismCategory)
     {
+    case 8:
+    {
+        Label("Pathfinder / autonomous solo physics");
+        Toggle("Enabled", &g_Config.m_PrismSoloEnabled);
+        if(Button(g_Config.m_PrismSoloMode ? "Mode: Autopilot" : "Mode: Assist", 38)) g_Config.m_PrismSoloMode ^= 1;
+        if(Button(g_Config.m_PrismSoloTarget ? "Target: Manual" : "Target: Finish", 39)) g_Config.m_PrismSoloTarget ^= 1;
+        if(Button("Set target at cursor (or bind prism_solo_cursor)", 40)) GameClient()->PrismPathfinderTarget(true);
+        if(Button(GameClient()->m_PrismSolo.Paused() ? "Resume" : "Pause", 41))
+        {
+            if(GameClient()->m_PrismSolo.Paused()) GameClient()->m_PrismSolo.Resume();
+            else GameClient()->m_PrismSolo.Pause();
+        }
+        if(Button("Replan", 42)) GameClient()->m_PrismSolo.Resume();
+        if(Button("Reset map analysis and planner", 43)) { GameClient()->m_PrismSolo.Reset(); GameClient()->m_PrismSolo.Resume(); }
+        Slider("Search budget (microseconds / tick)", &g_Config.m_PrismSoloBudget, 500, 8000);
+        Slider("Planning horizon (ticks)", &g_Config.m_PrismSoloHorizon, 24, 200);
+        Slider("Replan position threshold", &g_Config.m_PrismSoloThreshold, 4, 64);
+        Toggle("Prefer robust routes", &g_Config.m_PrismSoloSafe);
+        Toggle("Preserve useful momentum", &g_Config.m_PrismSoloMomentum);
+        Toggle("Manual input pauses Autopilot", &g_Config.m_PrismSoloOverride);
+        Toggle("Show route", &g_Config.m_PrismSoloRoute);
+        Toggle("Show predicted trajectory", &g_Config.m_PrismSoloPrediction);
+        Toggle("Show hook anchors", &g_Config.m_PrismSoloHooks);
+        Toggle("Show search debug", &g_Config.m_PrismSoloDebug);
+        Toggle("Log state changes", &g_Config.m_PrismSoloLog);
+        Toggle("Show status widget", &g_Config.m_PrismSoloHud);
+        Slider("Widget X", &g_Config.m_PrismSoloHudX, 0, 10000);
+        Slider("Widget Y", &g_Config.m_PrismSoloHudY, 0, 10000);
+        Label("F12 / prism_solo_stop: emergency stop");
+        Label(GameClient()->m_PrismSolo.Reason());
+        break;
+    }
     case 7: // Bounded local prediction and input assistance
     {
         Label("Assist   /   local prediction");

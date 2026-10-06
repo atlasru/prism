@@ -13,6 +13,7 @@
 
 // Prism settings use the normal DDNet config persistence and range validation.
 #include "prism_assist_variables.h"
+#include "prism_pathfinder_variables.h"
 #include "prism_atmosphere_variables.h"
 #include "prism_effect_variables.h"
 #include "prism_qol_variables.h"

@@ -20,6 +20,13 @@ public:
  }
  void RebaseSource(int Manual, int Mask) { m_LastManual = Manual & Mask; }
  bool Owned() const { return m_Owned; }
+ int Suppress(int Manual, int Mask)
+ {
+  m_LastManual = Manual & Mask;
+  if(m_Output & 1) m_Output = (m_Output + 1) & Mask;
+  m_Owned = false;
+  return m_Output;
+ }
  int Compose(int Manual, bool Pulse, int Mask)
  {
   Manual &= Mask;

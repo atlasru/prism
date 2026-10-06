@@ -1755,6 +1755,7 @@ void CHud::OnRender()
 			RenderRecord();
 	}
 	RenderPrismModules();
+	GameClient()->PrismRenderPathfinderHud(m_Width, m_Height);
 	RenderCursor();
 }
 
