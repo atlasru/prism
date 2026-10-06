@@ -26,12 +26,16 @@ namespace PrismPath
 		float m_StartCost = 0, m_BestCost = UNREACHABLE;
 		bool m_Enabled = false, m_Paused = false, m_Owned = false, m_ReleasePending = false;
 		bool m_Autopilot = false;
+		const bool m_UseWallClock;
 		bool Adopt(CGameWorld &World, const SPlan &Plan, int64_t DeadlineUs);
 		bool SafeHold(CGameWorld &World, int64_t DeadlineUs);
 		void AccumulateStats();
 		void ClearPlan();
 
 	public:
+		// Tests may use deterministic work limits; production always uses wall-clock budgets.
+		explicit CController(bool UseWallClock = true) :
+			m_UseWallClock(UseWallClock) {}
 		void Reset(bool ClearMap = true);
 		void Stop(const char *pReason = "disabled");
 		void Pause(const char *pReason = "paused");

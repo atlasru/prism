@@ -26,11 +26,13 @@ namespace PrismPath
 		FINISH = 8192,
 		SPAWN = 16384,
 		DEEP_FREEZE = 32768,
-		TUNE = 65536
+		TUNE = 65536,
+		TELE_EXIT = 131072
 	};
 	struct SCell
 	{
 		unsigned m_Flags = 0;
+		unsigned char m_TeleNumber = 0, m_TeleType = 0;
 		int m_Region = -1;
 		bool m_Passable = false;
 	};

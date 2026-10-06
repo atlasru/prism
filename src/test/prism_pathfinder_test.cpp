@@ -1,8 +1,14 @@
 #include "prism_fixture.h"
 
+#include <engine/shared/datafile.h>
+#include <engine/shared/map.h>
+#include <engine/storage.h>
+
 #include <game/client/pathfinder/controller.h>
 #include <game/client/pathfinder/search.h>
 #include <game/client/prism_input.h>
+
+#include <cstdlib>
 
 using namespace PrismPath;
 
@@ -17,7 +23,7 @@ namespace
 	}
 	bool ContinueAutopilot(CGameWorld &World, vec2 Destination, int Horizon = 100)
 	{
-		CController Controller;
+		CController Controller(false);
 		Controller.SetGoals({Destination});
 		SSettings Settings;
 		Settings.m_Autopilot = true;
@@ -337,7 +343,7 @@ TEST_F(CPrismPhysics, PathfinderAutopilotCompletesAndReplansAfterInputDivergence
 	CGameWorld Source;
 	World(Source, Bugs, Tunes.data());
 	Character(Source, 0, m_Core.m_Pos);
-	CController Controller;
+	CController Controller(false);
 	Controller.SetGoals({vec2(900, 305)});
 	SSettings Settings;
 	Settings.m_Autopilot = true;
@@ -373,7 +379,7 @@ TEST_F(CPrismPhysics, PathfinderPauseDisableResetAndDisconnectReleaseOwnership)
 	CGameWorld Source;
 	World(Source, Bugs, Tunes.data());
 	Character(Source, 0, m_Core.m_Pos);
-	CController C;
+	CController C(false);
 	C.SetGoals({vec2(900, 305)});
 	SSettings Settings;
 	Settings.m_Autopilot = true;
@@ -413,7 +419,7 @@ TEST_F(CPrismPhysics, PathfinderAssistAndManualOverrideLeavePhysicalInputUntouch
 	CGameWorld Source;
 	World(Source, Bugs, Tunes.data());
 	Character(Source, 0, m_Core.m_Pos);
-	CController C;
+	CController C(false);
 	C.SetGoals({vec2(900, 305)});
 	SSettings Settings;
 	CNetObj_PlayerInput Input{};
@@ -430,4 +436,167 @@ TEST_F(CPrismPhysics, PathfinderAssistAndManualOverrideLeavePhysicalInputUntouch
 	EXPECT_EQ(Input.m_Direction, -1);
 	EXPECT_EQ(Input.m_Hook, 1);
 	EXPECT_EQ(Input.m_Jump, 1);
+}
+
+TEST_F(CPrismPhysics, PathfinderRealTutorialMapDiscoversAndExecutesLocalRoute)
+{
+	auto pStorage = CreateLocalStorage();
+	ASSERT_NE(pStorage, nullptr);
+	CMap Loaded;
+	ASSERT_TRUE(Loaded.Load(pStorage.get(), PRISM_TEST_MAP_DIR "/Tutorial.map", IStorage::TYPE_ABSOLUTE));
+	m_Layers.Init(&Loaded, false, false);
+	m_Collision.Init(&m_Layers);
+	CMapAnalysis Map;
+	ASSERT_TRUE(Map.Begin(m_Collision));
+	while(!Map.Step()) {}
+	ASSERT_FALSE(Map.Finishes().empty());
+	std::vector<vec2> Spawns;
+	for(int i = 0; i < Map.Width() * Map.Height(); ++i)
+		if(Map.Cells()[i].m_Flags & SPAWN)
+			Spawns.push_back(m_Collision.GetPos(i));
+	ASSERT_FALSE(Spawns.empty());
+	const vec2 Spawn = Spawns[0];
+	vec2 Destination = Spawn;
+	float Best = UNREACHABLE;
+	// Discover a nearby safe standing target from geometry, not a saved solution.
+	for(int i = 0; i < Map.Width() * Map.Height(); ++i)
+	{
+		const auto &Cell = Map.Cells()[i];
+		const vec2 P = m_Collision.GetPos(i);
+		const float D = distance(P, Spawn);
+		if(!Cell.m_Passable || !(Cell.m_Flags & FLOOR) || D < 160 || D > 300)
+			continue;
+		CNavigation Nav;
+		if(!Nav.Begin(Map, {P}, true))
+			continue;
+		while(!Nav.Step()) {}
+		const float Cost = Nav.Cost(Spawn);
+		if(Cost < Best)
+		{
+			Best = Cost;
+			Destination = P;
+		}
+	}
+	ASSERT_LT(Best, UNREACHABLE);
+	CMapBugs Bugs;
+	std::array<CTuningParams, 256> Tunes;
+	CGameWorld Source;
+	World(Source, Bugs, Tunes.data());
+	Character(Source, 0, Spawn);
+	EXPECT_TRUE(ContinueAutopilot(Source, Destination, 160));
+	EXPECT_LT(distance(Source.GetCharacterById(0)->Core()->m_Pos, Destination), 24);
+	std::printf("Tutorial map %dx%d: %zu regions, %zu finishes, %zu teleport inputs; autonomous local displacement %.0f units\n", Map.Width(), Map.Height(), Map.Regions().size(), Map.Finishes().size(), Map.Teleports().size(), distance(Spawn, Source.GetCharacterById(0)->Core()->m_Pos));
+}
+
+TEST_F(CPrismPhysics, PathfinderMultiStageGapAndHookAutopilot)
+{
+	for(int X = 0; X < CMemoryMap::WIDTH; ++X)
+	{
+		m_Map.Set(X, 10, TILE_AIR);
+		m_Map.Set(X, 20, TILE_SOLID);
+	}
+	for(int X = 8; X <= 12; ++X)
+	{
+		m_Map.Set(X, 20, TILE_AIR);
+		m_Map.Set(X, 23, TILE_DEATH);
+	}
+	for(int X = 18; X <= 30; ++X)
+		m_Map.Set(X, 13, TILE_SOLID);
+	m_Map.Set(5, 19, ENTITY_SPAWN + ENTITY_OFFSET);
+	m_Map.Set(6, 19, TILE_START);
+	m_Map.Set(24, 12, TILE_FINISH);
+	Init();
+	CMapBugs Bugs;
+	std::array<CTuningParams, 256> Tunes;
+	CGameWorld Source;
+	World(Source, Bugs, Tunes.data());
+	auto *pChar = Character(Source, 0, vec2(176, 625));
+	auto Core = pChar->GetCore();
+	Core.m_Jumps = 1;
+	pChar->SetCore(Core);
+	CController Controller(false);
+	SSettings Settings;
+	Settings.m_Autopilot = true;
+	Settings.m_BudgetUs = 8000;
+	Settings.m_Horizon = 200;
+	bool Attached = false, Released = false, Jumped = false;
+	for(int Tick = 0; Tick < 1500 && Controller.Status() != EStatus::FINISHED; ++Tick)
+	{
+		CNetObj_PlayerInput Input{};
+		Input.m_TargetX = 100;
+		Controller.Compose(&Source, 0, Input, true, true, false, Settings);
+		ExecuteInput(Source, Input);
+		Jumped |= Input.m_Jump != 0;
+		Attached |= Source.GetCharacterById(0)->Core()->m_HookState == HOOK_GRABBED;
+		Released |= Attached && !Input.m_Hook;
+		ASSERT_EQ(CSimulator::CheckPosition(m_Collision, Source.GetCharacterById(0)->Core()->m_Pos), EReject::NONE);
+	}
+	EXPECT_EQ(Controller.Status(), EStatus::FINISHED) << Controller.Reason() << " position " << Source.GetCharacterById(0)->Core()->m_Pos.x << "," << Source.GetCharacterById(0)->Core()->m_Pos.y;
+	EXPECT_TRUE(Jumped);
+	EXPECT_TRUE(Attached);
+	EXPECT_TRUE(Released);
+	// Optional export for exercising the actual network client/server, never consumed by production search.
+	if(const char *pFile = std::getenv("PRISM_PATHFINDER_EXPORT_MAP"))
+	{
+		auto Storage = CreateLocalStorage();
+		CDataFileWriter Writer;
+		ASSERT_TRUE(Writer.Open(Storage.get(), pFile, IStorage::TYPE_ABSOLUTE));
+		CMapItemVersion Version{1};
+		CMapItemInfo Info{1, -1, -1, -1, -1};
+		Writer.AddItem(MAPITEMTYPE_VERSION, 0, sizeof(Version), &Version);
+		Writer.AddItem(MAPITEMTYPE_INFO, 0, sizeof(Info), &Info);
+		m_Map.m_Group.m_ParallaxX = m_Map.m_Group.m_ParallaxY = 100;
+		m_Map.m_Game.m_Color = m_Map.m_Front.m_Color = {255, 255, 255, 255};
+		m_Map.m_Game.m_Image = m_Map.m_Front.m_Image = -1;
+		m_Map.m_Game.m_ColorEnv = m_Map.m_Front.m_ColorEnv = -1;
+		Writer.AddItem(MAPITEMTYPE_GROUP, 0, sizeof(m_Map.m_Group), &m_Map.m_Group);
+		Writer.AddItem(MAPITEMTYPE_LAYER, 0, sizeof(m_Map.m_Game), &m_Map.m_Game);
+		Writer.AddItem(MAPITEMTYPE_LAYER, 1, sizeof(m_Map.m_Front), &m_Map.m_Front);
+		Writer.AddData(sizeof(m_Map.m_aGame), m_Map.m_aGame.data());
+		Writer.AddData(sizeof(m_Map.m_aFront), m_Map.m_aFront.data());
+		Writer.Finish();
+	}
+}
+TEST_F(CPrismPhysics, PathfinderTimedSwitchPhaseChangesDominanceKey)
+{
+	Init();
+	CMapBugs Bugs;
+	std::array<CTuningParams, 256> Tunes;
+	CGameWorld Source;
+	World(Source, Bugs, Tunes.data());
+	Character(Source, 0, m_Core.m_Pos);
+	Source.Switchers().resize(1);
+	auto &Switch = Source.Switchers()[0];
+	Switch.m_aStatus[0] = true;
+	Switch.m_aType[0] = TILE_SWITCHTIMEDOPEN;
+	Switch.m_aEndTick[0] = 150;
+	const auto Before = SStateKey::From(SState::Read(Source, 0), false, false);
+	++Source.m_GameTick;
+	EXPECT_FALSE(Before == SStateKey::From(SState::Read(Source, 0), false, false));
+}
+
+TEST_F(CPrismPhysics, PathfinderSearchYieldsAtDeadlineAndResumesWithoutLosingRoot)
+{
+	Init();
+	CMapBugs Bugs;
+	std::array<CTuningParams, 256> Tunes;
+	CGameWorld Source;
+	World(Source, Bugs, Tunes.data());
+	Character(Source, 0, m_Core.m_Pos);
+	CMapAnalysis Map;
+	ASSERT_TRUE(Map.Begin(m_Collision));
+	Map.Step(1024, NowUs() - 1);
+	EXPECT_EQ(Map.Progress(), 0);
+	while(!Map.Step()) {}
+	CNavigation Nav;
+	ASSERT_TRUE(Nav.Begin(Map, {vec2(560, 305)}, true));
+	while(!Nav.Step()) {}
+	CPhysicsSearch Search;
+	ASSERT_TRUE(Search.Begin(Source, 0, Map, Nav, {}));
+	EXPECT_FALSE(Search.Step(NowUs() - 1));
+	EXPECT_EQ(Search.Stats().m_Expanded, 0);
+	EXPECT_GT(Search.Stats().m_Timeouts, 0);
+	for(int i = 0; i < 200 && !Search.Step(0, 256); ++i) {}
+	EXPECT_TRUE(Search.Result().Valid());
+	EXPECT_TRUE(Nav.AtGoal(Search.Result().m_aStates[Search.Result().m_Ticks].m_Pos));
 }

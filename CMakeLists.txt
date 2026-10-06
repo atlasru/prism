@@ -3407,6 +3407,7 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
       $<TARGET_OBJECTS:rust-bridge-shared>
       ${DEPS}
     )
+    target_compile_definitions(prism-physics-tests PRIVATE PRISM_TEST_MAP_DIR="${PROJECT_SOURCE_DIR}/data/maps")
     target_link_libraries(prism-physics-tests ${PNG_LIBRARIES} ${GTEST_LIBRARIES} ${LIBS_CLIENT})
     target_include_directories(prism-physics-tests SYSTEM PRIVATE ${GTEST_INCLUDE_DIRS})
     list(APPEND TARGETS_OWN prism-physics-tests)

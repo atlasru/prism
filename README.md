@@ -34,6 +34,10 @@ Prism includes a modular HUD system with configurable widgets such as active hot
 
 HUD elements can be positioned and configured independently.
 
+### Autonomous solo Pathfinder
+
+Prism can analyze the loaded map and search executable movement, jump and hook inputs through DDNet prediction. Assist previews the route; Autopilot executes short verified plans with feedback and recovery. Manual input pauses it by default, and F12 stops it. This first version targets static solo obstacles; teleport transitions, dynamic doors, weapon boosts and deliberate freeze crossings remain unsupported. See [controls, architecture and limitations](doc/prism-pathfinder.md).
+
 ### Macros
 
 Prism includes a configurable macro system for multi-action input sequences and DDNet-oriented actions.

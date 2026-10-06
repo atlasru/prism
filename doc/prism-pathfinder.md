@@ -44,7 +44,7 @@ an unsafe sequence.
 - `types`: exact observed physical state and quantized dominance keys. Keys retain
   velocity, jump availability/input edges, hook position/direction/state/age,
   freeze, weapon, tune zone, abilities, movement restrictions, teleport checkpoint
-  and switch state. Simulation retains exact worlds, not quantized physics.
+  and switch state including remaining timed-switch duration. Simulation retains exact worlds, not quantized physics.
 - `simulator`: detached `CGameWorld::CopyWorld(..., true)` with normal character
   `OnDirectInput`, `OnPredictedInput` and world ticks. This uses the same DDNet
   acceleration, gravity, jumping, friction, hooking, swinging and tile prediction
@@ -59,7 +59,8 @@ an unsafe sequence.
 - `controller`: current-world verification of at most 32 committed ticks,
   divergence checks against predicted position/velocity/jump/hook state, resuming
   search between snapshots and safe neutral/directional/hook-hold recovery while
-  searching. Candidate plans from older snapshots are re-simulated before use.
+  searching. Recovery is verified before spending the search budget, so search
+  timeout alone does not discard a safe continuation. Candidate plans from older snapshots are re-simulated before use.
   Eight seconds without route progress or repeated failed plans stops control.
 
 `prism_pathfinder.cpp` connects configuration, input ownership, bounded world
@@ -100,7 +101,7 @@ setup, followed by isolated teleport/switch/dynamic collision simulation.
 Build `game-client`, `testrunner`, and `prism-physics-tests`; run `run_tests`.
 The physics suite includes deterministic exact prediction parity/source isolation,
 state equivalence, geometry/finish selection, hook line of sight, pruning/scoring,
-flat traversal, death-gap jump, hook-only elevated traversal with attachment and
+flat traversal, multi-stage automatic-finish gap/hook traversal, death-gap jump, hook-only elevated traversal with attachment and
 release, narrow freeze clearance, alternate freeze-wall routing, and closed-loop
 divergence/replanning/ownership cleanup. Coordinates belong only to synthetic
 fixtures; production contains no map-specific routes.
@@ -111,3 +112,18 @@ Rendering caps route segments, committed prediction and retained search traces;
 no full explored-state cloud is drawn by default. Progress is remaining geometric
 route cost, not a guarantee of eventual completion. Synthetic completion and
 prediction parity do not establish complete real-map or universal KoG support.
+
+The real Tutorial `.map` test discovers a safe nearby standing target from map
+geometry and reaches it autonomously (160 units); this is local traversal, not a
+claim of completing Tutorial. An optional test-only
+`PRISM_PATHFINDER_EXPORT_MAP=<absolute path>` exports the multi-stage fixture for
+running a real local client/server. The exported file contains spawn/start/finish,
+a death gap and elevated platform, with no solution inputs. A native Linux client
+and local DDNet server reached the finish using Autopilot and normal network inputs
+with `air_jump_impulse 0` to require hooking. Real difficult KoG completion remains
+unvalidated.
+
+Controller traversal tests disable wall-clock deadlines and use the same bounded
+work count/physics. Separate deadline tests verify yielding and resumption;
+production controllers always enable the clock. This avoids CI CPU scheduling
+turning a deterministic physics assertion into a timing lottery.

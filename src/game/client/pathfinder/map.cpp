@@ -66,6 +66,13 @@ namespace PrismPath
 		if(C.IsTeleport(Index) || C.IsEvilTeleport(Index) || C.IsCheckTeleport(Index) || C.IsCheckEvilTeleport(Index) ||
 			C.IsTeleportHook(Index))
 			Cell.m_Flags |= TELEPORT;
+		if(C.TeleLayer())
+		{
+			Cell.m_TeleNumber = C.TeleLayer()[Index].m_Number;
+			Cell.m_TeleType = C.TeleLayer()[Index].m_Type;
+			if(Cell.m_TeleType == TILE_TELEOUT || Cell.m_TeleType == TILE_TELECHECKOUT)
+				Cell.m_Flags |= TELE_EXIT;
+		}
 		if(C.IsSpeedup(Index))
 			Cell.m_Flags |= SPEEDUP;
 		if(C.IsTune(Index))
@@ -103,7 +110,7 @@ namespace PrismPath
 			m_vFinishes.push_back(Index);
 		if(Cell.m_Flags & (START | SPAWN))
 			m_vStarts.push_back(Index);
-		if(Cell.m_Flags & TELEPORT)
+		if(Cell.m_Flags & (TELEPORT | TELE_EXIT))
 			m_vTeleports.push_back(Index);
 		m_vCells.push_back(Cell);
 	}

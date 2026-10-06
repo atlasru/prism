@@ -1,6 +1,7 @@
 #include "controller.h"
 
 #include <game/collision.h>
+#include <game/mapitems.h>
 
 #include <algorithm>
 
@@ -66,6 +67,9 @@ namespace PrismPath
 	{
 		m_Paused = false;
 		m_Failures = 0;
+		m_StallTick = -1;
+		m_BestCost = UNREACHABLE;
+		m_StartCost = 0;
 		Replan("resumed");
 	}
 	void CController::Replan(const char *pReason)
@@ -83,6 +87,8 @@ namespace PrismPath
 		m_Navigation.Reset();
 		m_vRoute.clear();
 		m_StartCost = 0;
+		m_BestCost = UNREACHABLE;
+		m_StallTick = -1;
 		Replan("destination changed");
 	}
 	bool CController::Adopt(CGameWorld &World, const SPlan &Candidate, int64_t Deadline)
@@ -261,7 +267,19 @@ namespace PrismPath
 		if(Tick != m_LastTick)
 		{
 			const int64_t Start = NowUs();
-			const int64_t Deadline = Start + std::clamp(Settings.m_BudgetUs, 500, 8000);
+			const int64_t Deadline = m_UseWallClock ? Start + std::clamp(Settings.m_BudgetUs, 500, 8000) : 0;
+			const int CurrentOffset = m_Plan.Valid() ? Tick - m_PlanStartTick : -1;
+			const bool HaveContinuation = CurrentOffset >= 0 && CurrentOffset < m_Plan.m_Ticks && !Diverged(m_Plan.m_aStates[CurrentOffset], m_Observed, Settings.m_ReplanDistance);
+			const bool NeedHold = m_Autopilot && !HaveContinuation;
+			// Verify a recovery input before spending the budget on search. A search
+			// timeout is not evidence that the current stationary state is unsafe.
+			if(NeedHold && !SafeHold(*pWorld, Deadline))
+			{
+				Pause("no safe recovery continuation");
+				m_Status = EStatus::NO_ROUTE;
+				return Release();
+			}
+			const CNetObj_PlayerInput Recovery = HaveContinuation ? m_Plan.m_aInputs[CurrentOffset] : m_Output;
 			m_LastTick = Tick;
 			if(!m_Map.Collision())
 				m_Map.Begin(*pWorld->Collision());
@@ -274,9 +292,10 @@ namespace PrismPath
 			{
 				m_Status = EStatus::ANALYZING;
 				m_Reason = "extracting geometry / regions / hook faces";
-				m_Map.Step(2048, Deadline - 400);
-				ReleaseInput(m_Output);
-				if(m_Autopilot && !SafeHold(*pWorld, Deadline))
+				m_Map.Step(2048, Deadline ? Deadline - 400 : 0);
+				if(!m_Autopilot)
+					ReleaseInput(m_Output);
+				if(m_Autopilot && !NeedHold && !SafeHold(*pWorld, Deadline))
 				{
 					Pause("no safe continuation during map analysis");
 					m_Status = EStatus::NO_ROUTE;
@@ -302,9 +321,10 @@ namespace PrismPath
 						m_Status = EStatus::PLANNING;
 						m_Reason = "global region routing";
 					}
-					m_Navigation.Step(2048, Deadline - 400);
-					ReleaseInput(m_Output);
-					if(m_Autopilot && !m_Navigation.Ready() && !SafeHold(*pWorld, Deadline))
+					m_Navigation.Step(2048, Deadline ? Deadline - 400 : 0);
+					if(!m_Autopilot)
+						ReleaseInput(m_Output);
+					if(m_Autopilot && !NeedHold && !m_Navigation.Ready() && !SafeHold(*pWorld, Deadline))
 					{
 						Pause("no safe continuation during route analysis");
 						m_Status = EStatus::NO_ROUTE;
@@ -327,7 +347,9 @@ namespace PrismPath
 						m_BestCost = Cost;
 						m_StallTick = Tick;
 					}
-					if(m_Navigation.AtGoal(m_Observed.m_Pos))
+					const int TileIndex = pWorld->Collision()->GetPureMapIndex(m_Observed.m_Pos);
+					const bool FinishTile = pWorld->Collision()->GetTileIndex(TileIndex) == TILE_FINISH || pWorld->Collision()->GetFrontTileIndex(TileIndex) == TILE_FINISH;
+					if(m_vGoals.empty() ? FinishTile : m_Navigation.AtGoal(m_Observed.m_Pos))
 					{
 						Pause("destination reached");
 						m_Status = EStatus::FINISHED;
@@ -354,7 +376,7 @@ namespace PrismPath
 							m_vRoute = m_Navigation.Route(m_Observed.m_Pos);
 							m_Reason = "searching physical states";
 						}
-						m_Search.Step(Deadline - 500, 256);
+						m_Search.Step(Deadline ? Deadline - 500 : 0, 256);
 						AccumulateStats();
 						if(m_Search.Complete() || (m_Search.Stats().m_Simulations >= 256 && m_Search.Result().Valid()))
 						{
@@ -383,7 +405,9 @@ namespace PrismPath
 					}
 					else if(m_Autopilot)
 					{
-						if(!SafeHold(*pWorld, Deadline))
+						if(NeedHold || HaveContinuation)
+							m_Output = Recovery;
+						else if(!SafeHold(*pWorld, Deadline))
 						{
 							Pause("no safe recovery continuation");
 							m_Status = EStatus::NO_ROUTE;

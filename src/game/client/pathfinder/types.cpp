@@ -54,7 +54,8 @@ namespace PrismPath
 			if(Team >= 0 && Team < MAX_CLIENTS)
 			{
 				Hash = (Hash ^ Switcher.m_aStatus[Team]) * 1099511628211ULL;
-				Hash = (Hash ^ static_cast<unsigned>(Switcher.m_aEndTick[Team])) * 1099511628211ULL;
+				Hash = (Hash ^ static_cast<unsigned>(Switcher.m_aEndTick[Team] ? std::max(0, Switcher.m_aEndTick[Team] - World.GameTick()) : 0)) * 1099511628211ULL;
+				Hash = (Hash ^ static_cast<unsigned>(Switcher.m_aType[Team])) * 1099511628211ULL;
 			}
 		}
 		State.m_SwitchHash = Hash;
@@ -70,7 +71,7 @@ namespace PrismPath
 			S.m_HookTick / 2, S.m_HookedPlayer, S.m_FreezeTime, S.m_Weapon, S.m_TeleCheckpoint, S.m_TuneZone,
 			S.m_MoveRestrictions, int(S.m_Grounded), int(S.m_InFreeze) | (S.m_DeepFrozen << 1) | (S.m_LiveFrozen << 2),
 			static_cast<int>(S.m_Abilities), int(JumpHeld) | (HookHeld << 1), Q(S.m_HookTeleBase.x, 4), Q(S.m_HookTeleBase.y, 4),
-			// Preserve switch timer/other-entity phase when dynamic interactions exist.
+			// Reserved for a future isolated dynamic-world phase key.
 			0};
 		Key.m_SwitchHash = S.m_SwitchHash;
 		return Key;

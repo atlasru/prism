@@ -44,10 +44,10 @@ bool CGameClient::PrismComposePathfinder(CNetObj_PlayerInput &Input, const CNetO
 		m_PrismSoloLoggedStatus = m_PrismSolo.Status();
 		m_PrismSoloLoggedReason = m_PrismSolo.Reason();
 		const auto &S = m_PrismSolo.Stats();
-		log_info("prism-pathfinder", "%s: %s; expanded=%llu pruned=%llu simulations=%llu death=%llu freeze=%llu unknown=%llu replans=%llu search=%.3fms",
+		log_info("prism-pathfinder", "%s: %s; expanded=%llu pruned=%llu simulations=%llu death=%llu freeze=%llu unknown=%llu replans=%llu search=%.3fms pos=%.1f,%.1f",
 			PrismPath::StatusName(m_PrismSolo.Status()), m_PrismSolo.Reason(), (unsigned long long)S.m_Expanded, (unsigned long long)S.m_Pruned,
 			(unsigned long long)S.m_Simulations, (unsigned long long)S.m_Dead, (unsigned long long)S.m_Frozen,
-			(unsigned long long)S.m_Unsupported, (unsigned long long)S.m_Replans, S.m_LastUs / 1000);
+			(unsigned long long)S.m_Unsupported, (unsigned long long)S.m_Replans, S.m_LastUs / 1000, m_PrismSolo.Observed().m_Pos.x, m_PrismSolo.Observed().m_Pos.y);
 	}
 	return Owned;
 }
@@ -123,7 +123,7 @@ void CGameClient::PrismRenderPathfinderHud(float Width, float Height)
 	const float Scale = g_Config.m_PrismHudScale / 100.0f;
 	const float Font = std::clamp(g_Config.m_PrismHudFontSize, 5, 12) * Scale;
 	const float Row = Font + 4 * Scale, Pad = 7 * Scale;
-	const float W = std::min(Width, 190 * Scale), H = (g_Config.m_PrismSoloDebug ? 8 : 6) * Row + Pad * 2;
+	const float W = std::min(Width, 190 * Scale), H = (g_Config.m_PrismSoloDebug ? 9 : 7) * Row + Pad * 2;
 	const float X = PrismQol::HudCoordinate(g_Config.m_PrismSoloHudX, Width, W);
 	const float Y = PrismQol::HudCoordinate(g_Config.m_PrismSoloHudY, Height, H);
 	const float Opacity = g_Config.m_PrismHudOpacity / 100.0f;
@@ -142,16 +142,27 @@ void CGameClient::PrismRenderPathfinderHud(float Width, float Height)
 	str_format(aText, sizeof(aText), "Progress: %.0f%%   Search: %.2f ms", m_PrismSolo.Progress() * 100, m_PrismSolo.Stats().m_LastUs / 1000);
 	Text(3, aText);
 	Text(4, m_PrismSolo.Reason());
-	Text(5, "F12: emergency stop");
+	const auto &Plan = m_PrismSolo.Plan();
+	if(Plan.Valid())
+	{
+		const auto &Input = Plan.m_aInputs[0];
+		str_format(aText, sizeof(aText), "Next: %s%s%s", Input.m_Direction < 0 ? "Left" : Input.m_Direction > 0 ? "Right" :
+															  "Hold",
+			Input.m_Jump ? " / jump" : "", Input.m_Hook ? " / hook" : " / release");
+		Text(5, aText);
+	}
+	else
+		Text(5, "Next: awaiting safe trajectory");
+	Text(6, "F12: emergency stop");
 	if(g_Config.m_PrismSoloDebug)
 	{
 		const auto &S = m_PrismSolo.Observed();
 		const auto &Stats = m_PrismSolo.Stats();
 		str_format(aText, sizeof(aText), "v %.1f,%.1f  jumps %d/%d  hook %d", S.m_Vel.x, S.m_Vel.y, S.m_JumpedTotal, S.m_Jumps, S.m_HookState);
-		Text(6, aText);
+		Text(7, aText);
 		str_format(aText, sizeof(aText), "Expanded %llu  pruned %llu  replans %llu", (unsigned long long)Stats.m_Expanded,
 			(unsigned long long)Stats.m_Pruned, (unsigned long long)Stats.m_Replans);
-		Text(7, aText);
+		Text(8, aText);
 	}
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 }
