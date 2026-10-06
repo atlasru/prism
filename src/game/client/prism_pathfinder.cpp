@@ -18,6 +18,7 @@ bool CGameClient::PrismComposePathfinder(CNetObj_PlayerInput &Input, const CNetO
 	Settings.m_SafeRoutes = g_Config.m_PrismSoloSafe;
 	Settings.m_Momentum = g_Config.m_PrismSoloMomentum;
 	Settings.m_ManualOverride = g_Config.m_PrismSoloOverride;
+	Settings.m_RaceStarted = m_Snap.m_pGameInfoObj && (m_Snap.m_pGameInfoObj->m_GameStateFlags & GAMESTATEFLAG_RACETIME);
 	if(g_Config.m_PrismSoloEnabled)
 	{
 		if(g_Config.m_PrismSoloTarget)
@@ -137,7 +138,7 @@ void CGameClient::PrismRenderPathfinderHud(float Width, float Height)
 	Text(0, g_Config.m_PrismSoloMode ? "PATHFINDER / AUTOPILOT" : "PATHFINDER / ASSIST", true);
 	str_format(aText, sizeof(aText), "Target: %s   State: %s", g_Config.m_PrismSoloTarget ? "Manual" : "Finish", PrismPath::StatusName(m_PrismSolo.Status()));
 	Text(1, aText);
-	str_format(aText, sizeof(aText), "Stage: %s", m_PrismSolo.Map().RegionName(m_PrismSolo.Map().RegionAt(m_PrismSolo.Observed().m_Pos)));
+	str_format(aText, sizeof(aText), "Stage: %s", m_PrismSolo.SeekingStart() ? "Reach race start" : m_PrismSolo.Map().RegionName(m_PrismSolo.Map().RegionAt(m_PrismSolo.Observed().m_Pos)));
 	Text(2, aText);
 	str_format(aText, sizeof(aText), "Progress: %.0f%%   Search: %.2f ms", m_PrismSolo.Progress() * 100, m_PrismSolo.Stats().m_LastUs / 1000);
 	Text(3, aText);

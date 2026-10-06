@@ -62,6 +62,7 @@ void CControls::ResetInput(int Dummy)
 
 void CControls::OnPlayerDeath()
 {
+	GameClient()->m_PrismSolo.ResetRaceStart();
 	GameClient()->m_PrismSolo.Pause("death: resume after respawn");
 	for(int &AmmoCount : m_aAmmoCount)
 		AmmoCount = 0;

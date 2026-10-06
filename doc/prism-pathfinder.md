@@ -10,7 +10,9 @@ avoidance. It does not promise completion of arbitrary KoG maps.
 Open **Prism → Pathfinder**. Enable the module in **Assist** first to inspect the
 route and prediction; select **Autopilot** to execute. Finish tiles are discovered
 on both game and front layers, and global routing selects the cheapest connected
-finish. For local testing select **Manual**, then **Destination at cursor**.
+finish. If the observed server race flag is not started, automatic routing first
+visits an identified start tile, then replans toward finish; starting mid-race skips
+that detour. Death resets this race stage. For local testing select **Manual**, then **Destination at cursor**.
 Settings use the existing saved Prism configuration. The existing intent-aware
 Freeze Avoid and its `prism_pathfinder` setting remain separate.
 

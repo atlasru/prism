@@ -26,6 +26,7 @@ namespace PrismPath
 		float m_StartCost = 0, m_BestCost = UNREACHABLE;
 		bool m_Enabled = false, m_Paused = false, m_Owned = false, m_ReleasePending = false;
 		bool m_Autopilot = false;
+		bool m_StartVisited = false, m_SeekingStart = false;
 		const bool m_UseWallClock;
 		bool Adopt(CGameWorld &World, const SPlan &Plan, int64_t DeadlineUs);
 		bool SafeHold(CGameWorld &World, int64_t DeadlineUs);
@@ -37,6 +38,8 @@ namespace PrismPath
 		explicit CController(bool UseWallClock = true) :
 			m_UseWallClock(UseWallClock) {}
 		void Reset(bool ClearMap = true);
+		void ResetRaceStart();
+		bool SeekingStart() const { return m_SeekingStart; }
 		void Stop(const char *pReason = "disabled");
 		void Pause(const char *pReason = "paused");
 		void Resume();

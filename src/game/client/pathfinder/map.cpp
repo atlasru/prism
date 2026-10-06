@@ -291,9 +291,10 @@ namespace PrismPath
 		m_Queue = {};
 		m_Ready = false;
 	}
-	bool CNavigation::Begin(const CMapAnalysis &Map, const std::vector<vec2> &Goals, bool SafeRoutes)
+	bool CNavigation::Begin(const CMapAnalysis &Map, const std::vector<vec2> &Goals, bool SafeRoutes, float GoalRadius)
 	{
 		Reset();
+		m_GoalRadius = GoalRadius;
 		if(!Map.Ready() || Goals.empty())
 			return false;
 		m_pMap = &Map;
@@ -391,6 +392,8 @@ namespace PrismPath
 	}
 	bool CNavigation::AtGoal(vec2 P, float Radius) const
 	{
+		if(Radius < 0)
+			Radius = m_GoalRadius;
 		return std::any_of(m_vGoals.begin(), m_vGoals.end(), [&](vec2 Goal) { return distance(P, Goal) <= Radius; });
 	}
 	vec2 CNavigation::Goal(vec2 P) const

@@ -53,6 +53,7 @@ namespace PrismPath
 		bool m_SafeRoutes = true;
 		bool m_Momentum = true;
 		bool m_ManualOverride = true;
+		bool m_RaceStarted = false; // Observed server race flag, not a saved user preference.
 	};
 
 	struct SState

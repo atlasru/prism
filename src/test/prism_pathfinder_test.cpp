@@ -519,19 +519,21 @@ TEST_F(CPrismPhysics, PathfinderMultiStageGapAndHookAutopilot)
 	Settings.m_Autopilot = true;
 	Settings.m_BudgetUs = 8000;
 	Settings.m_Horizon = 200;
-	bool Attached = false, Released = false, Jumped = false;
+	bool Attached = false, Released = false, Jumped = false, CrossedStart = false;
 	for(int Tick = 0; Tick < 1500 && Controller.Status() != EStatus::FINISHED; ++Tick)
 	{
 		CNetObj_PlayerInput Input{};
 		Input.m_TargetX = 100;
 		Controller.Compose(&Source, 0, Input, true, true, false, Settings);
 		ExecuteInput(Source, Input);
+		CrossedStart |= m_Collision.GetTileIndex(m_Collision.GetPureMapIndex(Source.GetCharacterById(0)->Core()->m_Pos)) == TILE_START;
 		Jumped |= Input.m_Jump != 0;
 		Attached |= Source.GetCharacterById(0)->Core()->m_HookState == HOOK_GRABBED;
 		Released |= Attached && !Input.m_Hook;
 		ASSERT_EQ(CSimulator::CheckPosition(m_Collision, Source.GetCharacterById(0)->Core()->m_Pos), EReject::NONE);
 	}
 	EXPECT_EQ(Controller.Status(), EStatus::FINISHED) << Controller.Reason() << " position " << Source.GetCharacterById(0)->Core()->m_Pos.x << "," << Source.GetCharacterById(0)->Core()->m_Pos.y;
+	EXPECT_TRUE(CrossedStart);
 	EXPECT_TRUE(Jumped);
 	EXPECT_TRUE(Attached);
 	EXPECT_TRUE(Released);
@@ -599,4 +601,50 @@ TEST_F(CPrismPhysics, PathfinderSearchYieldsAtDeadlineAndResumesWithoutLosingRoo
 	for(int i = 0; i < 200 && !Search.Step(0, 256); ++i) {}
 	EXPECT_TRUE(Search.Result().Valid());
 	EXPECT_TRUE(Nav.AtGoal(Search.Result().m_aStates[Search.Result().m_Ticks].m_Pos));
+}
+
+TEST_F(CPrismPhysics, PathfinderServerStartedRaceSkipsStartDetour)
+{
+	m_Map.Set(2, 9, TILE_START);
+	m_Map.Set(30, 9, TILE_FINISH);
+	Init();
+	CMapBugs Bugs;
+	std::array<CTuningParams, 256> Tunes;
+	CGameWorld Source;
+	World(Source, Bugs, Tunes.data());
+	Character(Source, 0, m_Core.m_Pos);
+	CController Controller(false);
+	SSettings Settings;
+	Settings.m_Autopilot = true;
+	Settings.m_RaceStarted = true;
+	for(int i = 0; i < 4; ++i)
+	{
+		CNetObj_PlayerInput Input{};
+		Controller.Compose(&Source, 0, Input, true, true, false, Settings);
+		ExecuteInput(Source, Input);
+	}
+	EXPECT_FALSE(Controller.SeekingStart());
+	EXPECT_GT(Controller.Target().x, m_Core.m_Pos.x);
+	Controller.ResetRaceStart();
+	Controller.Pause("death");
+	Controller.Resume();
+	Settings.m_RaceStarted = false;
+	for(int i = 0; i < 2; ++i)
+	{
+		CNetObj_PlayerInput Input{};
+		Controller.Compose(&Source, 0, Input, true, true, false, Settings);
+		ExecuteInput(Source, Input);
+	}
+	EXPECT_TRUE(Controller.SeekingStart());
+	EXPECT_LT(Controller.Target().x, m_Core.m_Pos.x);
+	Controller.SetGoals({vec2(560, 305)});
+	Controller.Resume();
+	for(int i = 0; i < 2; ++i)
+	{
+		CNetObj_PlayerInput Input{};
+		Controller.Compose(&Source, 0, Input, true, true, false, Settings);
+		ExecuteInput(Source, Input);
+	}
+	EXPECT_FALSE(Controller.SeekingStart());
+	EXPECT_GT(Controller.Target().x, m_Core.m_Pos.x);
 }

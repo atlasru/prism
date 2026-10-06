@@ -34,6 +34,7 @@ namespace PrismPath
 	void CController::Reset(bool ClearMap)
 	{
 		Stop("client reset");
+		m_StartVisited = m_SeekingStart = false;
 		m_Paused = false;
 		if(ClearMap)
 		{
@@ -45,6 +46,15 @@ namespace PrismPath
 		m_StallTick = -1;
 		m_BestCost = UNREACHABLE;
 		m_StartCost = 0;
+	}
+	void CController::ResetRaceStart()
+	{
+		m_StartVisited = m_SeekingStart = false;
+		m_Navigation.Reset();
+		m_StartCost = 0;
+		m_BestCost = UNREACHABLE;
+		m_StallTick = -1;
+		Replan("race reset");
 	}
 	void CController::Stop(const char *pReason)
 	{
@@ -84,6 +94,7 @@ namespace PrismPath
 		if(Goals == m_vGoals)
 			return;
 		m_vGoals = Goals;
+		m_SeekingStart = false;
 		m_Navigation.Reset();
 		m_vRoute.clear();
 		m_StartCost = 0;
@@ -209,6 +220,9 @@ namespace PrismPath
 			m_Failures = 0;
 			m_BestCost = UNREACHABLE;
 			m_StartCost = 0;
+			m_StartVisited = Settings.m_RaceStarted;
+			m_SeekingStart = false;
+			m_Navigation.Reset();
 		}
 		if(Settings.m_Autopilot != m_Autopilot)
 		{
@@ -255,6 +269,19 @@ namespace PrismPath
 			return Release();
 		}
 		m_Observed = SState::Read(*pWorld, Id);
+		if(Settings.m_RaceStarted && !m_StartVisited)
+		{
+			m_StartVisited = true;
+			if(m_SeekingStart)
+			{
+				m_SeekingStart = false;
+				m_Navigation.Reset();
+				Replan("server confirmed race start");
+				m_StartCost = 0;
+				m_BestCost = UNREACHABLE;
+				m_StallTick = -1;
+			}
+		}
 		if(m_Observed.m_FreezeTime || m_Observed.m_DeepFrozen || m_Observed.m_LiveFrozen)
 		{
 			Pause("frozen: resume after recovery");
@@ -309,10 +336,17 @@ namespace PrismPath
 					if(m_Status == EStatus::ANALYZING || m_Status == EStatus::REPLANNING)
 					{
 						std::vector<vec2> Goals = m_vGoals;
+						if(Goals.empty() && !m_StartVisited)
+						{
+							for(int Index : m_Map.Starts())
+								if(m_Map.Cells()[Index].m_Flags & START)
+									Goals.push_back(m_Map.Collision()->GetPos(Index));
+							m_SeekingStart = !Goals.empty();
+						}
 						if(Goals.empty())
 							for(int Index : m_Map.Finishes())
 								Goals.push_back(m_Map.Collision()->GetPos(Index));
-						if(!m_Navigation.Begin(m_Map, Goals, Settings.m_SafeRoutes))
+						if(!m_Navigation.Begin(m_Map, Goals, Settings.m_SafeRoutes, m_vGoals.empty() ? 10 : 20))
 						{
 							Pause("no reachable finish: set a manual destination");
 							m_Status = EStatus::NO_ROUTE;
@@ -330,6 +364,19 @@ namespace PrismPath
 						m_Status = EStatus::NO_ROUTE;
 						return Release();
 					}
+				}
+				const int ObservedTile = pWorld->Collision()->GetPureMapIndex(m_Observed.m_Pos);
+				const bool OnStart = pWorld->Collision()->GetTileIndex(ObservedTile) == TILE_START || pWorld->Collision()->GetFrontTileIndex(ObservedTile) == TILE_START;
+				if(m_Navigation.Ready() && m_SeekingStart && OnStart)
+				{
+					m_StartVisited = true;
+					m_SeekingStart = false;
+					m_Navigation.Reset();
+					Replan("race start crossed: routing to finish");
+					m_StartCost = 0;
+					m_BestCost = UNREACHABLE;
+					m_StallTick = -1;
+					m_Output = Recovery;
 				}
 				if(m_Navigation.Ready())
 				{
@@ -349,7 +396,7 @@ namespace PrismPath
 					}
 					const int TileIndex = pWorld->Collision()->GetPureMapIndex(m_Observed.m_Pos);
 					const bool FinishTile = pWorld->Collision()->GetTileIndex(TileIndex) == TILE_FINISH || pWorld->Collision()->GetFrontTileIndex(TileIndex) == TILE_FINISH;
-					if(m_vGoals.empty() ? FinishTile : m_Navigation.AtGoal(m_Observed.m_Pos))
+					if(!m_SeekingStart && (m_vGoals.empty() ? FinishTile : m_Navigation.AtGoal(m_Observed.m_Pos)))
 					{
 						Pause("destination reached");
 						m_Status = EStatus::FINISHED;

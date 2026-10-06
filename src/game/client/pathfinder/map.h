@@ -80,6 +80,7 @@ namespace PrismPath
 		CCollision *Collision() const { return m_pCollision; }
 		const std::vector<SCell> &Cells() const { return m_vCells; }
 		const std::vector<SRegion> &Regions() const { return m_vRegions; }
+		const std::vector<int> &Starts() const { return m_vStarts; }
 		const std::vector<int> &Finishes() const { return m_vFinishes; }
 		const std::vector<int> &Teleports() const { return m_vTeleports; }
 		const std::vector<SSurface> &Surfaces() const { return m_vSurfaces; }
@@ -101,15 +102,16 @@ namespace PrismPath
 		using SQueueEntry = std::pair<float, int>;
 		std::priority_queue<SQueueEntry, std::vector<SQueueEntry>, std::greater<SQueueEntry>> m_Queue;
 		bool m_Ready = false, m_SafeRoutes = true;
+		float m_GoalRadius = 20;
 
 	public:
 		void Reset();
-		bool Begin(const CMapAnalysis &Map, const std::vector<vec2> &Goals, bool SafeRoutes);
+		bool Begin(const CMapAnalysis &Map, const std::vector<vec2> &Goals, bool SafeRoutes, float GoalRadius = 20);
 		bool Step(int MaxWork = 512, int64_t DeadlineUs = 0);
 		bool Ready() const { return m_Ready; }
 		float Cost(vec2 Position) const;
 		vec2 LocalTarget(vec2 Position, float Lookahead = 256) const;
-		bool AtGoal(vec2 Position, float Radius = 20) const;
+		bool AtGoal(vec2 Position, float Radius = -1) const;
 		vec2 Goal(vec2 Position) const;
 		std::vector<vec2> Route(vec2 Position, int Limit = 256) const;
 	};
